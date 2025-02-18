@@ -25,3 +25,7 @@
 ### Day 3
 
 -   Loading and showing tilemap from a text file
+-   Starting to show holes with corners
+-   Bullets are properly rotated and targeted
+
+![Day3](./Day3.gif)

@@ -1,25 +1,22 @@
-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X                                                                                 X
-X s                                                                               X
-X                                                                                 X
-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+XWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWX
+X                               X
+X                               X
+X                               X
+X                               X
+X                               X
+X                               X
+X                               X
+XXXXXXXXXXXXXXXXXX  XXXXXXXXXXXXX
+XWWWWWWWWWWWWWWWWX  XWWWWWWWWWWWX
+X                X  X           X
+X      HH        X  X           X
+X    HHHHH       X  X           X
+X    HHHHH       X  X           X
+X      HH        F  F           X
+X                               X
+XXXXX                           X
+XWWFW                           X
+Xs    XX                        X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW

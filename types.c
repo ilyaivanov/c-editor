@@ -80,11 +80,13 @@ void Formati32(i32 val, char *buff)
 u32 AppendI32(i32 val, char *buff)
 {
     char *start = buff;
+    char *reverseFrom = start;
     if (val < 0)
     {
         *buff = '-';
         val = -val;
         buff++;
+        reverseFrom++;
     }
 
     if (val == 0)
@@ -100,7 +102,7 @@ u32 AppendI32(i32 val, char *buff)
             val /= 10;
             buff++;
         }
-        ReverseString(start + 1);
+        ReverseString(reverseFrom);
     }
 
     return buff - start;

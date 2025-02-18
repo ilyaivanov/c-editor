@@ -28,6 +28,7 @@ GLuint vertexArray;
 #define POINTS_PER_VERTEX 5
 #define VERTICES_IN_TEXTURE 6
 #define PIXELS_PER_TEXEL 8
+#define TILE_SIZE 16
 
 float playerSpeed = 700;
 
@@ -56,12 +57,13 @@ Bullet bullets[1024] = {0};
 
 V3f GetCameraPos()
 {
-    return (V3f){-playerPos.x + view.x / 2.0f, -playerPos.y + view.y / 2.0f, 0.0f};
+    return (V3f){playerPos.x, playerPos.y, 0.0f};
 }
 
 LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
 
+    V3f cameraPos;
     switch (message)
     {
     case WM_DESTROY:
@@ -80,17 +82,43 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             }
         }
         bullet->isAlive = 1;
-        V3f cameraPos = GetCameraPos();
-        V3f properMouse = {mouse.x - (f32)view.x / 2, view.y - mouse.y - (f32)view.y / 2, 0.0f};
-        bullet->direction = V3fNormalize(V3fSub(properMouse, playerPos));
+        cameraPos = GetCameraPos();
+
+        V3f mouseWorldPos = {0};
+
+        mouseWorldPos.x = mouse.x - view.x / 2 + cameraPos.x;
+        mouseWorldPos.y = cameraPos.y + (view.y - mouse.y - view.y / 2);
+
+        bullet->direction = V3fNormalize(V3fSub(mouseWorldPos, playerPos));
         bullet->pos = playerPos;
-        bullet->speed = 400;
+        bullet->speed = 2500;
 
         break;
 
     case WM_MOUSEMOVE:
         mouse.x = GET_X_LPARAM(lParam);
         mouse.y = GET_Y_LPARAM(lParam);
+
+        // cameraPos = GetCameraPos();
+
+        // V3f r = V3fAdd(V3fSub(mouse, (V3f){(f32)view.x / 2, (f32)view.y / 2, 0.0f}), cameraPos);
+
+        // char message[255] = {0};
+        // u32 pos = 0;
+        // message[pos++] = 'M';
+        // message[pos++] = ':';
+        // pos += AppendI32((i32)mouse.x, message + pos);
+        // message[pos++] = ' ';
+        // message[pos++] = 'C';
+        // message[pos++] = ':';
+        // pos += AppendI32((i32)cameraPos.x, message + pos);
+        // message[pos++] = ' ';
+        // message[pos++] = 'r';
+        // message[pos++] = ':';
+        // pos += AppendI32((i32)r.x, message + pos);
+        // message[pos++] = '\n';
+        // message[pos++] = '\0';
+        // OutputDebugStringA(message);
 
         break;
 
@@ -321,14 +349,53 @@ void WinMainCRTStartup()
     GLuint gun;
     LoadTexture("..\\textures\\gun.bmp", &gun);
 
-    GLuint bullet;
-    LoadTexture("..\\textures\\bullet.bmp", &bullet);
+    GLuint bulletTexture;
+    LoadTexture("..\\textures\\bullet.bmp", &bulletTexture);
 
     GLuint floor1;
     LoadTexture("..\\textures\\floor\\floor1.bmp", &floor1);
 
     GLuint floor2;
     LoadTexture("..\\textures\\floor\\floor2.bmp", &floor2);
+
+    GLuint top;
+    LoadTexture("..\\textures\\top.bmp", &top);
+    GLuint wall;
+    LoadTexture("..\\textures\\wall.bmp", &wall);
+    GLuint wallShadowLeft;
+    LoadTexture("..\\textures\\wall_shadow_left.bmp", &wallShadowLeft);
+    GLuint wallShadowRight;
+    LoadTexture("..\\textures\\wall_shadow_right.bmp", &wallShadowRight);
+    GLuint shadowTop;
+    LoadTexture("..\\textures\\shadow_top.bmp", &shadowTop);
+    GLuint shadowTopLeft;
+    LoadTexture("..\\textures\\shadow_top_left.bmp", &shadowTopLeft);
+    GLuint shadowTopRight;
+    LoadTexture("..\\textures\\shadow_top_right.bmp", &shadowTopRight);
+    GLuint shadowLeft;
+    LoadTexture("..\\textures\\shadow_left.bmp", &shadowLeft);
+    GLuint shadowRight;
+    LoadTexture("..\\textures\\shadow_right.bmp", &shadowRight);
+    GLuint flag;
+    LoadTexture("..\\textures\\flag.bmp", &flag);
+
+    GLuint holeCenter;
+    LoadTexture("..\\textures\\holes\\hole_center.bmp", &holeCenter);
+
+    GLuint holeLeft;
+    LoadTexture("..\\textures\\holes\\hole_left.bmp", &holeLeft);
+
+    GLuint holeRight;
+    LoadTexture("..\\textures\\holes\\hole_right.bmp", &holeRight);
+
+    GLuint holeBottomLeft;
+    LoadTexture("..\\textures\\holes\\hole_bottom_left.bmp", &holeBottomLeft);
+
+    GLuint holeBottomRight;
+    LoadTexture("..\\textures\\holes\\hole_bottom_right.bmp", &holeBottomRight);
+
+    GLuint holeBottom;
+    LoadTexture("..\\textures\\holes\\hole_bottom.bmp", &holeBottom);
 
     int isPlayerRunning = 0;
     int currentAnim = 0;
@@ -346,6 +413,39 @@ void WinMainCRTStartup()
     LoadTexture("..\\textures\\run_5.bmp", &runsAnimation[5]);
     LoadTexture("..\\textures\\run_6.bmp", &runsAnimation[6]);
     LoadTexture("..\\textures\\run_7.bmp", &runsAnimation[7]);
+
+    FileContent map = ReadMyFileImp("..\\map.txt");
+
+    int tileX = 0;
+    int tileY = 0;
+
+    int playerTileX = 0;
+    int playerTileY = 0;
+    for (i32 i = 0; i <= map.size; i++)
+    {
+
+        if (map.content[i] == 's')
+        {
+            playerTileX = tileX;
+            playerTileY = tileY;
+        }
+
+        if (map.content[i] == '\n')
+        {
+            tileY++;
+            tileX = 0;
+        }
+        else
+        {
+            tileX++;
+        }
+    }
+
+    int tileRowsCount = tileY + 1;
+    int tileColsCount = tileX + 1;
+
+    playerPos.x = playerTileX * TILE_SIZE * PIXELS_PER_TEXEL;
+    playerPos.y = (tileRowsCount - playerTileY - 1) * TILE_SIZE * PIXELS_PER_TEXEL + 10 * PIXELS_PER_TEXEL;
 
     glUseProgram(baseProgram);
 
@@ -442,18 +542,80 @@ void WinMainCRTStartup()
         Mat4 projection = CreateScreenProjection(view);
         glUniformMatrix4fv(projectionLocation, 1, GL_TRUE, projection.values);
 
-        V3f cameraPos = GetCameraPos();
+        V3f halfView = (V3f){(f32)view.x / 2, (f32)view.y / 2, 0.0f};
+        V3f cameraPos = V3fMult(V3fSub(GetCameraPos(), halfView), -1);
+
         Mat4 viewMatrix = Mat4TranslateV3f(Mat4Identity(), cameraPos);
         glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrix.values);
 
-        V3f floorScale = {PIXELS_PER_TEXEL * 16, PIXELS_PER_TEXEL * 16, 1.0f};
-        for (i32 i = -30; i <= 30; i++)
-        {
-            V3f position = {i * 16.0f * PIXELS_PER_TEXEL, 0, 0.0f};
-            Mat4 modelMatrix = Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), position), floorScale);
-            glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrix.values);
+        V3f floorScale = {PIXELS_PER_TEXEL * TILE_SIZE, PIXELS_PER_TEXEL * TILE_SIZE, 1.0f};
 
-            DrawTexture(floor2);
+        int tileX = 0;
+        int tileY = 0;
+
+        for (i32 i = 0; i <= map.size; i++)
+        {
+            char ch = map.content[i];
+
+            GLuint textureId = 0;
+
+#define tileOnPrevLine (map.content[i - tileColsCount])
+#define tileOnPrevCell (map.content[i - 1])
+#define tileOnNextCell (map.content[i + 1])
+
+            if (ch == 'H' && i > tileColsCount && tileOnNextCell == ' ' && tileOnPrevLine == ' ')
+                textureId = holeBottomLeft;
+            else if (ch == 'H' && i > tileColsCount && tileOnPrevCell == ' ' && tileOnPrevLine == ' ')
+                textureId = holeBottomRight;
+            else if (ch == 'H' && i > 0 && tileOnPrevLine == ' ')
+                textureId = holeBottom;
+            else if (ch == 'H' && i > 0 && tileOnPrevCell == ' ')
+                textureId = holeRight;
+            else if (ch == 'H' && i > 0 && tileOnNextCell == ' ')
+                textureId = holeLeft;
+
+            else if (ch == 'H')
+                textureId = holeCenter;
+            else if ((ch == ' ' || ch == 's') && i > tileColsCount && (tileOnPrevLine == 'W' || tileOnPrevLine == 'F') && (tileOnPrevCell == 'X' || tileOnPrevCell == 'W'))
+                textureId = shadowTopLeft;
+            else if ((ch == ' ' || ch == 's') && i > tileColsCount && i < map.size - 1 && (tileOnPrevLine == 'W' || tileOnPrevLine == 'F') && (tileOnNextCell == 'X' || tileOnNextCell == 'W'))
+                textureId = shadowTopRight;
+            else if ((ch == ' ' || ch == 's') && i > tileColsCount && (tileOnPrevLine == 'W' || tileOnPrevLine == 'F'))
+                textureId = shadowTop;
+            else if ((ch == ' ' || ch == 's') && i > 1 && (tileOnPrevCell == 'X' || tileOnPrevCell == 'W' || tileOnPrevCell == 'F'))
+                textureId = shadowLeft;
+            else if ((ch == ' ' || ch == 's') && i > 1 && (tileOnNextCell == 'X' || tileOnNextCell == 'W' || tileOnNextCell == 'F'))
+                textureId = shadowRight;
+            else if (ch == 'W' && i > 0 && map.content[i - 1] == 'X')
+                textureId = wallShadowLeft;
+            else if (ch == 'W' && i < map.size - 1 && map.content[i + 1] == 'X')
+                textureId = wallShadowRight;
+            else if (ch == 'X')
+                textureId = top;
+            else if (ch == 'W')
+                textureId = wall;
+            else if (ch == 'F')
+                textureId = flag;
+
+            if (textureId > 0)
+            {
+                float x = tileX * TILE_SIZE * PIXELS_PER_TEXEL;
+                float y = (tileRowsCount - tileY - 1) * TILE_SIZE * PIXELS_PER_TEXEL;
+                V3f position = {x, y, 0.0f};
+                Mat4 modelMatrix = Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), position), floorScale);
+                glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrix.values);
+                DrawTexture(textureId);
+            }
+
+            if (ch == '\n')
+            {
+                tileY++;
+                tileX = 0;
+            }
+            else
+            {
+                tileX++;
+            }
         }
 
         V3f charScale = {PIXELS_PER_TEXEL * 40.0f, PIXELS_PER_TEXEL * 40.0f, 1.0f};
@@ -495,40 +657,27 @@ void WinMainCRTStartup()
             charScale.y *= -1;
         }
 
-        char message[255] = {0};
-        u32 pos = 0;
-        message[pos++] = 'X';
-        message[pos++] = ':';
-        pos += AppendI32(properMouse.x, message + pos);
-        message[pos++] = ' ';
-        message[pos++] = 'Y';
-        message[pos++] = ':';
-        pos += AppendI32(properMouse.y, message + pos);
-        message[pos++] = ' ';
-        message[pos++] = 'A';
-        message[pos++] = ':';
-        pos += AppendI32((i32)(angle * 180.0 / PI), message + pos);
-        message[pos++] = '\n';
-        message[pos++] = '\0';
-        OutputDebugStringA(message);
-
         modelMatrix = RotateAroundZ(Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), playerPosMat), charScale), angle);
         glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrix.values);
         DrawTexture(gun);
 
         for (int i = 0; i < ArrayLength(bullets); i++)
         {
+            Bullet *bullet = &bullets[i];
 
-            if (bullets[i].isAlive)
+            if (bullet->isAlive)
             {
-                bullets[i].pos.x += bullets[i].direction.x * bullets[i].speed * frameSec;
-                bullets[i].pos.y += bullets[i].direction.y * bullets[i].speed * frameSec;
+                bullet->pos.x += bullet->direction.x * bullet->speed * frameSec;
+                bullet->pos.y += bullet->direction.y * bullet->speed * frameSec;
 
                 charScale = (V3f){PIXELS_PER_TEXEL * 40.0f, PIXELS_PER_TEXEL * 40.0f, 1.0f};
-                modelMatrix = Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), bullets[i].pos), charScale);
+                float bulletAngle = atan(bullet->direction.y / bullet->direction.x);
+                if (bullet->direction.x < 0)
+                    bulletAngle -= PI;
+                modelMatrix = RotateAroundZ(Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), bullets[i].pos), charScale), bulletAngle);
                 glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrix.values);
 
-                DrawTexture(bullet);
+                DrawTexture(bulletTexture);
             }
         }
 

@@ -92,10 +92,20 @@ V3f V3fSub(V3f v1, V3f v2)
     return (V3f){v1.x - v2.x, v1.y - v2.y, v1.z - v2.z};
 }
 
+V3f V3fAdd(V3f v1, V3f v2)
+{
+    return (V3f){v1.x + v2.x, v1.y + v2.y, v1.z + v2.z};
+}
+
 V3f V3fNormalize(V3f v)
 {
     float len = mysqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
     return (V3f){v.x / len, v.y / len, v.z / len};
+}
+
+V3f V3fMult(V3f v, float scalar)
+{
+    return (V3f){v.x * scalar, v.y * scalar, v.z * scalar};
 }
 
 V2f V2fMulScalar(V2f v1, float scalar)
