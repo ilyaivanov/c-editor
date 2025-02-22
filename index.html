@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Document</title>
+    </head>
+    <body>
+        <script>
+            const url = ".\\sounds\\file.wav";
+            // const s = new Audio(".\\sounds\\file.wav");
+            // window.addEventListener("mousedown", () => {
+            //     if (!s.paused) s.currentTime = 0;
+            //     else s.play();
+            // });
+
+            const audioCtx = new (window.AudioContext ||
+                window.webkitAudioContext)();
+            let buffer;
+
+            async function loadSound(url) {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                buffer = await audioCtx.decodeAudioData(arrayBuffer);
+            }
+
+            function playFireSound() {
+                if (!buffer) return;
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start();
+            }
+
+            // Load the sound
+            loadSound(url);
+
+            // Play it
+            document.addEventListener("mousedown", playFireSound);
+        </script>
+    </body>
+</html>

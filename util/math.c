@@ -195,8 +195,8 @@ inline Mat4 RotateAroundZ(Mat4 base, float rads)
 
     // clang-format off
     Mat4 rotat = {
-        cosf(rads), -sinf(rads),        0,        0,
-        sinf(rads),  cosf(rads),        0,        0,
+        my_cosf(rads), -my_sinf(rads),        0,        0,
+        my_sinf(rads),  my_cosf(rads),        0,        0,
         0,                    0,        1,        0,
         0,                    0,        0,        1,
     };

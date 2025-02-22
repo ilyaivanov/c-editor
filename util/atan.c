@@ -62,7 +62,7 @@ static const double aT[] = {
     1.62858201153657823623e-02,  /* 0x3F90AD3A, 0xE322DA11 */
 };
 
-double fabs(double x)
+double my_fabs(double x)
 {
     u_int32_t high;
     GET_HIGH_WORD(high, x);
@@ -74,7 +74,7 @@ static const double
     one = 1.0,
     huge = 1.0e300;
 
-double atan(double x)
+double my_atan(double x)
 {
     double w, s1, s2, z;
     int32_t ix, hx, id;
@@ -104,7 +104,7 @@ double atan(double x)
     }
     else
     {
-        x = fabs(x);
+        x = my_fabs(x);
         if (ix < 0x3ff30000)
         { /* |x| < 1.1875 */
             if (ix < 0x3fe60000)

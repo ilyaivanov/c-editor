@@ -72,7 +72,7 @@ void SinCos(float x, float *sinX, float *cosX)
     *cosX = xd2 * (cos_i * CosXdC2C6 - SinIXd * SinXdS3S7) - SinIXd * S1 + cos_i * C0;
 }
 
-float sinf(float x)
+float my_sinf(float x)
 {
     float cos = 0.0f;
     float sin = 0.0f;
@@ -80,7 +80,7 @@ float sinf(float x)
     return sin;
 }
 
-float cosf(float x)
+float my_cosf(float x)
 {
     float cos = 0.0f;
     float sin = 0.0f;

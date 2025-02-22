@@ -7,6 +7,7 @@
 #include "util/bmp.c"
 #include <math.h>
 #include "util/atan.c"
+#include "sound.c"
 
 u32 isRunning = 1;
 
@@ -93,6 +94,8 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         bullet->pos = playerPos;
         bullet->speed = 2500;
 
+        PlayFile(Fire);
+
         break;
 
     case WM_MOUSEMOVE:
@@ -150,6 +153,13 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         {
             isDDown = 1;
         }
+
+        if (wParam == 'Z')
+            PlayFile(One);
+        if (wParam == 'X')
+            PlayFile(Two);
+        if (wParam == 'C')
+            PlayFile(Go);
         break;
 
     case WM_KEYUP:
@@ -313,10 +323,13 @@ void WinMainCRTStartup()
 
     InitFunctions();
 
+    InitSound(window);
+
     if (isFullscreen)
         SetFullscreen(window, isFullscreen);
 
-    GLuint baseProgram = CreateProgram("..\\shader_vertex.glsl", "..\\shader_fragment.glsl");
+    GLuint baseProgram = CreateProgram("..\\shaders\\shader_vertex.glsl", "..\\shaders\\shader_fragment.glsl");
+    GLuint pureProgram = CreateProgram("..\\shaders\\pure_vertex.glsl", "..\\shaders\\pure_fragment.glsl");
 
     timeBeginPeriod(1);
     wglSwapIntervalEXT(0);
@@ -336,6 +349,10 @@ void WinMainCRTStartup()
     GLint projectionLocation = glGetUniformLocation(baseProgram, "projection");
     GLint viewMatrixLocation = glGetUniformLocation(baseProgram, "view");
     GLint modelMatrixLocation = glGetUniformLocation(baseProgram, "model");
+
+    GLint projectionLocation2 = glGetUniformLocation(pureProgram, "projection");
+    GLint modelMatrixLocation2 = glGetUniformLocation(pureProgram, "model");
+    GLint colorLocation = glGetUniformLocation(pureProgram, "color");
 
     GLuint idle;
     LoadTexture("..\\textures\\Idle_idle_0.bmp", &idle);
@@ -447,8 +464,6 @@ void WinMainCRTStartup()
     playerPos.x = playerTileX * TILE_SIZE * PIXELS_PER_TEXEL;
     playerPos.y = (tileRowsCount - playerTileY - 1) * TILE_SIZE * PIXELS_PER_TEXEL + 10 * PIXELS_PER_TEXEL;
 
-    glUseProgram(baseProgram);
-
     while (isRunning)
     {
         MSG msg;
@@ -535,6 +550,8 @@ void WinMainCRTStartup()
 
         playerPos.x += shift.x * frameSec * playerSpeed;
         playerPos.y += shift.y * frameSec * playerSpeed;
+
+        glUseProgram(baseProgram);
 
         glClearColor(184.0f / 255, 111.0f / 255, 80.0f / 255, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -648,7 +665,7 @@ void WinMainCRTStartup()
         }
         else
         {
-            angle = atan(properMouse.y / properMouse.x);
+            angle = my_atan(properMouse.y / properMouse.x);
         }
 
         if (properMouse.x < 0)
@@ -671,7 +688,7 @@ void WinMainCRTStartup()
                 bullet->pos.y += bullet->direction.y * bullet->speed * frameSec;
 
                 charScale = (V3f){PIXELS_PER_TEXEL * 40.0f, PIXELS_PER_TEXEL * 40.0f, 1.0f};
-                float bulletAngle = atan(bullet->direction.y / bullet->direction.x);
+                float bulletAngle = my_atan(bullet->direction.y / bullet->direction.x);
                 if (bullet->direction.x < 0)
                     bulletAngle -= PI;
                 modelMatrix = RotateAroundZ(Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), bullets[i].pos), charScale), bulletAngle);
@@ -679,6 +696,48 @@ void WinMainCRTStartup()
 
                 DrawTexture(bulletTexture);
             }
+        }
+
+        UpdateSound();
+
+        glUseProgram(pureProgram);
+        glUniformMatrix4fv(projectionLocation2, 1, GL_TRUE, projection.values);
+
+        int padding = 16;
+
+        f32 C = ((f32)view.x - (f32)padding * 2) / SoundOutput.SecondaryBufferSize;
+
+        for (int i = 0; i < ArrayLength(cursors); i++)
+        {
+            CursorInfo *info = &cursors[i];
+
+            V3f playColor = {1.0f, 1.0f, 1.0f};
+            f32 playX = info->play * C;
+
+            V3f writeColor = {1.0f, 0.3f, 0.3f};
+            f32 writeX = info->write * C;
+
+            // Display play
+            modelMatrix = Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), (V3f){playX, view.y / 2, 0}), (V3f){2, view.y - padding * 2, 1});
+            glUniformMatrix4fv(modelMatrixLocation2, 1, GL_TRUE, modelMatrix.values);
+
+            glUniform3f(colorLocation, playColor.r, playColor.g, playColor.b);
+
+            glUniformMatrix4fv(modelMatrixLocation2, 1, GL_TRUE, modelMatrix.values);
+
+            glBindVertexArray(vertexArray);
+            glDrawArrays(GL_TRIANGLES, 0, VERTICES_IN_TEXTURE);
+
+            // Display write
+            modelMatrix = Mat4ScaleV3f(Mat4TranslateV3f(Mat4Identity(), (V3f){writeX, view.y / 2, 0}), (V3f){2, view.y - padding * 2, 1});
+            glUniformMatrix4fv(modelMatrixLocation2, 1, GL_TRUE, modelMatrix.values);
+
+            glUniform3f(colorLocation, writeColor.r, writeColor.g, writeColor.b);
+
+            glUniformMatrix4fv(modelMatrixLocation2, 1, GL_TRUE, modelMatrix.values);
+
+            glBindVertexArray(vertexArray);
+            glDrawArrays(GL_TRIANGLES, 0, VERTICES_IN_TEXTURE);
         }
 
         SwapBuffers(dc);
