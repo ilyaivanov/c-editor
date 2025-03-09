@@ -1,0 +1,17 @@
+Write tasks for the editor
+ y Scroll
+ y Vertical movement
+ y Jump words
+ y Remove line
+ y Move lines up/down
+ y O and o to add lines above and below and beyond
+ y Autoscroll to extra items
+ y Better line numbers
+ - When adding a line via O,o,enter - preserve identation
+ - Search
+    - ability to highlith part of text
+    - 
+ - Undo/redo
+ - File picker
+ - Screen split
+ - Multiple cursors

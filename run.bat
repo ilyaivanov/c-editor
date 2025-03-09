@@ -14,7 +14,7 @@ if exist build rmdir /s /q build
 mkdir build
 pushd build
 
-set CommonCompilerOptions=/nologo /GR- /FC /GS- /Gs9999999
+set CommonCompilerOptions=/nologo /GR- /FC /GS- /Gs9999999 /Femain.exe
 
 set CompilerOptionsDev=/Zi /Od
 
@@ -25,17 +25,17 @@ set Libs=user32.lib kernel32.lib gdi32.lib opengl32.lib dwmapi.lib winmm.lib she
 
 IF "%arg1%" == "p" (
     echo Production build
-    cl %CommonCompilerOptions% %CompilerOptionsProd% ../main.c /link %LinkerOptions% %Libs% 
+    cl %CommonCompilerOptions% %CompilerOptionsProd% ../main_editor.c /link %LinkerOptions% %Libs% 
 )
 
 IF NOT "%arg1%" == "p" (
     echo Development build
-    cl %CommonCompilerOptions% %CompilerOptionsDev% ../main.c /link %LinkerOptions% %Libs% 
+    cl %CommonCompilerOptions% %CompilerOptionsDev% ../main_editor.c /link %LinkerOptions% %Libs% 
 )
 
 IF NOT "%arg1%" == "b" IF NOT "%arg2%" == "b" (
     echo Running...
-    call .\main.exe
+    call .\main_editor.exe
 )
 
 popd

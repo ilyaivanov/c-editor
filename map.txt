@@ -10,13 +10,27 @@ X                               X
 XXXXXXXXXXXXXXXXXX  XXXXXXXXXXXXX
 XWWWWWWWWWWWWWWWWX  XWWWWWWWWWWWX
 X                X  X           X
-X      HH        X  X           X
-X    HHHHH       X  X           X
-X    HHHHH       X  X           X
-X      HH        F  F           X
+X                X  X           X
+X                X  X           X
+X                F  F           X
 X                               X
+X                               X
+X                               X
+X                               X
+X                    X     X    X
+X                    X     X    X
+X                    X     X    X
+X                    X     X    X
+X                    XXXXXXX    X
+X                    XWWFWWX    X
+X                    X     X    X
+X                    XXX XXX    X
+X                    XWW WWX    X
+X                    X     X    X
+X                    W     W    X
 XXXXX                           X
-XWWFW                           X
+XWWWW                           X
+X                               X
 Xs    XX                        X
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW

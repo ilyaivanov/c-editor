@@ -108,6 +108,19 @@ u32 AppendI32(i32 val, char *buff)
     return buff - start;
 }
 
+u32 AppendStr(char *str, char *buff)
+{
+    u32 len = 0;
+    while (*(str + len) != '\0')
+    {
+
+        *buff = *(str + len);
+        buff++;
+        len++;
+    }
+    return len;
+}
+
 // void ReverseStringLen(char *str, int len)
 // {
 //     if (str == NULL)

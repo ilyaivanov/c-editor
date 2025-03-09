@@ -1,12 +1,50 @@
 #pragma once
+#include <stddef.h> /* for size_t */
 #include <windows.h>
 // #include <windowsx.h>
-// #include <dwmapi.h>
+#include <dwmapi.h>
 #include "types.c"
+
+#pragma function(memset)
+void *memset(void *dest, int c, size_t count)
+{
+    char *bytes = (char *)dest;
+    while (count--)
+    {
+        *bytes++ = (char)c;
+    }
+    return dest;
+}
+
+#pragma function(memcpy)
+void *memcpy(void *dest, const void *src, size_t count)
+{
+    char *d = (char *)dest;
+    char *s = (char *)src;
+    while (count--)
+    {
+        *d++ = *s++;
+    }
+    return dest;
+}
+
+#pragma function(memmove)
+void *memmove(void *dest, const void *src, size_t n)
+{
+    unsigned char *pd = dest;
+    const unsigned char *ps = src;
+    if ((ps < pd))
+        for (pd += n, ps += n; n--;)
+            *--pd = *--ps;
+    else
+        while (n--)
+            *pd++ = *ps++;
+    return dest;
+}
 
 int _fltused = 0x9875;
 
-HWND OpenWindow(WNDPROC OnEvent, V3f bgColor)
+HWND OpenWindow(WNDPROC OnEvent, V3f bgColor, char *title)
 {
     HINSTANCE instance = GetModuleHandle(0);
     WNDCLASSW windowClass = {0};
@@ -25,9 +63,8 @@ HWND OpenWindow(WNDPROC OnEvent, V3f bgColor)
     int screenWidth = GetDeviceCaps(dc, HORZRES);
     int screenHeight = GetDeviceCaps(dc, VERTRES);
 
-    int windowWidth = 2000;
-    int windowHeight = 800;
-    int padding = 20;
+    int windowWidth = (i32)((f32)screenWidth / 3.0f);
+    int windowHeight = 1000;
 
     // HWND window  = CreateWindowExW(
     //     WS_EX_CLIENTEDGE,
@@ -38,14 +75,14 @@ HWND OpenWindow(WNDPROC OnEvent, V3f bgColor)
     //     NULL, NULL, instance, NULL
     // );
 
-    HWND window = CreateWindowW(windowClass.lpszClassName, (wchar_t *)"Editor",
+    HWND window = CreateWindowW(windowClass.lpszClassName, (LPCWSTR)title,
                                 WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                                screenWidth - windowWidth - padding, padding, windowWidth, windowHeight,
+                                screenWidth - windowWidth + 11, 0, windowWidth, windowHeight,
                                 0, 0, instance, 0);
 
-    // BOOL USE_DARK_MODE = TRUE;
-    // BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(
-    //     window, DWMWA_USE_IMMERSIVE_DARK_MODE, &USE_DARK_MODE, sizeof(USE_DARK_MODE)));
+    BOOL USE_DARK_MODE = TRUE;
+    BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(
+        window, DWMWA_USE_IMMERSIVE_DARK_MODE, &USE_DARK_MODE, sizeof(USE_DARK_MODE)));
 
     // TODO: maybe this is because window is flickering during runtime
     // DeleteObject(windowClass.hbrBackground);
@@ -205,4 +242,18 @@ void WriteMyFile(char *path, char *content, int size)
     CloseHandle(file);
 
     Assert(bytesWritten == size);
+}
+
+inline i64 GetPerfFrequency()
+{
+    LARGE_INTEGER res;
+    QueryPerformanceFrequency(&res);
+    return res.QuadPart;
+}
+
+inline i64 GetPerfCounter()
+{
+    LARGE_INTEGER res;
+    QueryPerformanceCounter(&res);
+    return res.QuadPart;
 }

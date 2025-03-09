@@ -5,6 +5,9 @@
 #define PI 3.14159265359f
 #define ONE_OVER_SQUARE_ROOT_OF_TWO 0.70710678118f
 
+#define KB(v) (1024 * (v))
+#define MB(v) (1024 * KB(v))
+
 typedef int8_t i8;
 
 typedef int16_t i16;
@@ -32,7 +35,6 @@ typedef struct V2f
     f32 x, y;
 } V2f;
 typedef struct V3f
-
 {
     union
     {
@@ -170,15 +172,15 @@ inline Mat4 CreatePerspective(float fovyDeg, V2i screen, float zNear, float zFar
     // clang-format on
 }
 
-inline Mat4 CreateScreenProjection(V2i screen)
+inline Mat4 CreateScreenProjection(f32 width, f32 height)
 {
     // allows me to set vecrtex coords as 0..width/height, instead of -1..+1
     // 0,0 is bottom left, not top left
     // matrix in code != matrix in math notation, details at https://youtu.be/kBuaCqaCYwE?t=3084
     // in short: rows in math are columns in code
 
-    float w = 2.0f / (f32)screen.x;
-    float h = 2.0f / (f32)screen.y;
+    float w = 2.0f / width;
+    float h = 2.0f / height;
     // clang-format off
     return (Mat4){
         w,   0,   0,   -1,

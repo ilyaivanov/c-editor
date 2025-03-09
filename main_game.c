@@ -226,19 +226,6 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     }
     return DefWindowProc(window, message, wParam, lParam);
 }
-inline i64 GetPerfFrequency()
-{
-    LARGE_INTEGER res;
-    QueryPerformanceFrequency(&res);
-    return res.QuadPart;
-}
-
-inline i64 GetPerfCounter()
-{
-    LARGE_INTEGER res;
-    QueryPerformanceCounter(&res);
-    return res.QuadPart;
-}
 
 void DrawTexture(GLuint texture)
 {
@@ -314,7 +301,7 @@ void WinMainCRTStartup()
     // InitAppMemory();
 
     HINSTANCE instance = GetModuleHandle(0);
-    HWND window = OpenWindow(OnEvent, (V3f){0.3, 0.3, 0.3});
+    HWND window = OpenWindow(OnEvent, (V3f){0.3, 0.3, 0.3}, "Game");
     HDC dc = GetDC(window);
 
     float f = 0;
@@ -328,7 +315,7 @@ void WinMainCRTStartup()
     if (isFullscreen)
         SetFullscreen(window, isFullscreen);
 
-    GLuint baseProgram = CreateProgram("..\\shaders\\shader_vertex.glsl", "..\\shaders\\shader_fragment.glsl");
+    GLuint baseProgram = CreateProgram("..\\shaders\\texture_vertex.glsl", "..\\shaders\\texture_fragment.glsl");
     GLuint pureProgram = CreateProgram("..\\shaders\\pure_vertex.glsl", "..\\shaders\\pure_fragment.glsl");
 
     timeBeginPeriod(1);
@@ -556,7 +543,7 @@ void WinMainCRTStartup()
         glClearColor(184.0f / 255, 111.0f / 255, 80.0f / 255, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        Mat4 projection = CreateScreenProjection(view);
+        Mat4 projection = CreateScreenProjection(view.x, view.y);
         glUniformMatrix4fv(projectionLocation, 1, GL_TRUE, projection.values);
 
         V3f halfView = (V3f){(f32)view.x / 2, (f32)view.y / 2, 0.0f};

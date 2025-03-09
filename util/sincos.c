@@ -2,17 +2,6 @@
 
 #include <xmmintrin.h>
 
-#pragma function(memset)
-void *memset(void *dest, int c, size_t count)
-{
-    char *bytes = (char *)dest;
-    while (count--)
-    {
-        *bytes++ = (char)c;
-    }
-    return dest;
-}
-
 // sin cos taken from https://guide.handmadehero.org/code/day440
 #define R32_EPSILON 1.19209290e-7f
 
