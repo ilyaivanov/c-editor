@@ -14,8 +14,8 @@ f32 damping;
 
 void InitAnimations()
 {
-    stiffness = 420;
-    damping = 1.5 * mysqrtf(stiffness);
+    stiffness = 620;
+    damping = 1.7 * mysqrtf(stiffness);
 }
 
 Spring CreateSpring(f32 initialValue)

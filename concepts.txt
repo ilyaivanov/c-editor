@@ -1,4 +1,5 @@
 Write tasks for the editor
+Write a game
  y Scroll
  y Vertical movement
  y Jump words
@@ -7,10 +8,15 @@ Write tasks for the editor
  y O and o to add lines above and below and beyond
  y Autoscroll to extra items
  y Better line numbers
- - When adding a line via O,o,enter - preserve identation
- - Search
-    - ability to highlith part of text
-    - 
+ y When adding a line via O,o,enter - preserve identation
+ y Search
+    y ability to highlith part of text
+    y highlight some hardcoded values
+    y ability to show local search modal
+ y Improve font background. Switched to anti-aliased font
+ - Add text reflow
+ - Use grayscale bitmaps
+ - Collapse items and move items, not lines of text
  - Undo/redo
  - File picker
  - Screen split

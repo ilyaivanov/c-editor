@@ -102,6 +102,7 @@ u32 AppendI32(i32 val, char *buff)
             val /= 10;
             buff++;
         }
+        *buff = '\0';
         ReverseString(reverseFrom);
     }
 

@@ -2,3 +2,4 @@ build
 .vscode
 monitor.exe
 monitor.obj
+main.exe

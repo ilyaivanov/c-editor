@@ -64,8 +64,6 @@ typedef struct FontData
     FontKerningPair *pairsHash;
 } FontData;
 
-FontData *currentFont;
-
 // Segoe UI has around 8k pairs, monospace has none pairs
 #define PAIRS_HASH_LENGTH 16 * 1024
 inline int HashAndProbeIndex(const FontData *font, u16 left, u16 right)
@@ -256,32 +254,32 @@ void InitFont(FontData *font, FontInfo info, Arena *arena)
     InitFontData(font, info, arena);
 }
 
-inline int GetKerningValue(u16 left, u16 right)
-{
-    if (currentFont->isMonospaced)
-        return 0;
+// inline int GetKerningValue(u16 left, u16 right)
+// {
+//     if (currentFont->isMonospaced)
+//         return 0;
 
-    i32 index = HashAndProbeIndex(currentFont, left, right);
+//     i32 index = HashAndProbeIndex(currentFont, left, right);
 
-    if (currentFont->pairsHash[index].left != left && currentFont->pairsHash[index].right != right)
-    {
-        return 0;
-    }
+//     if (currentFont->pairsHash[index].left != left && currentFont->pairsHash[index].right != right)
+//     {
+//         return 0;
+//     }
 
-    return currentFont->pairsHash[index].val;
-}
+//     return currentFont->pairsHash[index].val;
+// }
 
-i32 GetTextWidth(const u8 *text)
-{
-    i32 res = 0;
-    while (*text)
-    {
-        u8 ch = *text;
-        // skips new lines and other control symbols
-        if (ch >= ' ')
-            res += currentFont->textures[ch].width + (GetKerningValue(ch, *(text + 1)));
+// i32 GetTextWidth(const u8 *text)
+// {
+//     i32 res = 0;
+//     while (*text)
+//     {
+//         u8 ch = *text;
+//         // skips new lines and other control symbols
+//         if (ch >= ' ')
+//             res += currentFont->textures[ch].width + (GetKerningValue(ch, *(text + 1)));
 
-        text++;
-    }
-    return res;
-}
+//         text++;
+//     }
+//     return res;
+// }

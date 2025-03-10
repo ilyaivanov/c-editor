@@ -18,17 +18,31 @@ HDC dc;
 u64 frequency;
 u64 start;
 
+f32 lineHeight = 1.2f;
+i32 fontSize = 13;
+
+// u32 isClearType = 0;
+
 i32 bgGrey = 0x08;
+// i32 fontGrey = 0xf0;
 
 // char *filename = ".\\test.txt";
-char *filename = ".\\concepts.txt";
-// char *filename = ".\\main2.c";
+// char *filename = ".\\perf.txt";
+// char *filename = ".\\concepts.txt";
+char *filename = ".\\main_editor.c";
+i32 mystrlen(char* str)
+{
+   i32 len = 0;
+   while(str[len] != '\0')
+      len++;
+   return len;
+}
 
 typedef struct CursorPos
 {
-    u32 global;
-    u32 line;
-    u32 lineOffset;
+    i32 global;
+    i32 line;
+    i32 lineOffset;
 } CursorPos;
 
 CursorPos cursor;
@@ -36,7 +50,8 @@ CursorPos cursor;
 typedef enum Mode
 {
     Insert,
-    Normal
+    Normal,
+    Search
 } Mode;
 
 Mode mode = Normal;
@@ -48,19 +63,62 @@ u32 isShiftPressed = 0;
 u32 isSaved = 1;
 
 u32 linesCount = 0;
+f32 pageHeight;
+u32 searchLen = 0;
+
+// TODO: use arena
+char searchTerm[KB(1)];
+
+u32 entriesCount = 0;
+u32 currentEntry = 0;
+// TODO: use arena
+
+typedef struct ColorScheme
+{
+    u32 font;
+    u32 searchResult;
+    u32 searchResultActive;
+    u32 line;
+    u32 lineCurrent;
+    u32 currentLineBg;
+} ColorScheme;
+
+i32 padding = 20;
+
+ColorScheme colorScheme;
+
+FontData font = {0};
+
+typedef struct EntryFound
+{
+    u32 at;
+    u32 len;
+} EntryFound;
+
+EntryFound entriesAt[1024 * 10] = {0};
 
 Spring scrollOffset = {0};
 
-void OnTextChanged()
+void SetupFonts()
 {
-    isSaved = 0;
-    linesCount = 1;
-    for (i32 i = 0; i < buffer.size; i++)
-    {
-        if (buffer.content[i] == '\n')
-            linesCount++;
-    }
+    InitFontData(&font, FontInfoAntialiased("Consolas", fontSize), &fontArena);
+
+    colorScheme.font = 0xffffff;
+    colorScheme.searchResult = 0x7070f0;
+    colorScheme.searchResultActive = 0x40f040;
+    colorScheme.line = 0x606060;
+    colorScheme.lineCurrent = 0xC0C0C0;
+    colorScheme.currentLineBg = 0x202020;
 }
+
+inline char ToCharLower(char ch)
+{
+    if (ch >= 'A' && ch <= 'Z')
+        return ch + ('a' - 'A');
+
+    return ch;
+}
+
 void ScrollIntoView();
 
 void SetCursorGlobalPos(u32 pos)
@@ -81,8 +139,50 @@ void SetCursorGlobalPos(u32 pos)
         }
 
         cursor.lineOffset = pos - lineStartedAt;
-        ScrollIntoView();
     }
+}
+
+void FindEntries()
+{
+    i32 currentWordIndex = 0;
+    entriesCount = 0;
+    for (i32 i = 0; i < buffer.size; i++)
+    {
+
+        if (ToCharLower(buffer.content[i]) ==
+            ToCharLower(searchTerm[currentWordIndex]))
+        {
+            currentWordIndex++;
+            if (currentWordIndex == searchLen)
+            {
+                entriesAt[entriesCount].at = i - searchLen + 1;
+                entriesAt[entriesCount].len = searchLen;
+                entriesCount++;
+                currentWordIndex = 0;
+            }
+        }
+        else
+        {
+            currentWordIndex = 0;
+        }
+    }
+
+    currentEntry = 0;
+}
+
+void OnTextChanged()
+{
+    isSaved = 0;
+    linesCount = 1;
+    for (i32 i = 0; i < buffer.size; i++)
+    {
+        if (buffer.content[i] == '\n')
+            linesCount++;
+    }
+
+    f32 v = (f32)font.charHeight * lineHeight;
+    i32 lineHeightPx = (i32)(v + 0.5);
+    pageHeight = linesCount * lineHeightPx + padding * 2;
 }
 
 i32 FindLineStart(i32 pos)
@@ -114,6 +214,29 @@ inline i32 MaxI32(i32 v1, i32 v2)
 inline f32 MaxF32(f32 v1, f32 v2)
 {
     return v1 > v2 ? v1 : v2;
+}
+
+inline i32 RoundI32(f32 v)
+{
+    if (v < 0)
+        return (i32)(v - 0.5);
+    else
+        return (i32)(v + 0.5);
+}
+
+inline u8 RoundU8(f32 v)
+{
+    return (u8)(v + 0.5);
+}
+
+i32 GetIdentationLevel()
+{
+    i32 start = FindLineStart(cursor.global);
+    i32 level = 0;
+    while (buffer.content[start + level] == ' ')
+        level++;
+
+    return level;
 }
 
 void GoDown()
@@ -309,37 +432,85 @@ void JumpToFirstNonBlackCharOfLine()
 
 void InsertNewLineAbove()
 {
+    i32 identation = GetIdentationLevel();
     i32 lineStart = FindLineStart(cursor.global);
     InsertCharAt(&buffer, lineStart, '\n');
     OnTextChanged();
     SetCursorGlobalPos(lineStart);
     mode = Insert;
     isJustMovedToInsert = 1;
+
+    while (identation > 0)
+    {
+        InsertCharAtCurrentPosition(' ');
+        identation--;
+    }
 }
 
 void InsertNewLineBelow()
 {
     i32 lineEnd = FindLineEnd(cursor.global);
+    i32 identation = GetIdentationLevel();
+
     InsertCharAt(&buffer, lineEnd + 1, '\n');
     OnTextChanged();
     SetCursorGlobalPos(lineEnd + 1);
     mode = Insert;
     isJustMovedToInsert = 1;
+
+    while (identation > 0)
+    {
+        InsertCharAtCurrentPosition(' ');
+        identation--;
+    }
 }
 
-inline void CopyBitmapRectTo(MyBitmap *sourceT, u32 offsetX, u32 offsetY)
+inline u8 Blend(u8 from, u8 to, f32 f)
 {
+    f32 res = (1 - f) * (f32)from + f * (f32)to;
+    return RoundU8(res);
+}
+
+inline u32 AlphaBlendGreyscale(u32 destination, u32 source, u32 color)
+{
+    u8 destR = (destination & 0xff0000) >> 16;
+    u8 destG = (destination & 0x00ff00) >> 8;
+    u8 destB = (destination & 0x0000ff) >> 0;
+
+    u8 sourceR = (color & 0xff0000) >> 16;
+    u8 sourceG = (color & 0x00ff00) >> 8;
+    u8 sourceB = (color & 0x0000ff) >> 0;
+
+    f32 a = (f32)(source & 0xff) / 255.0f;
+    u8 blendedR = Blend(destR, sourceR, a);
+    u8 blendedG = Blend(destG, sourceG, a);
+    u8 blendedB = Blend(destB, sourceB, a);
+
+    return (blendedR << 16) | (blendedG << 8) | (blendedB << 0);
+}
+
+// Antialised fonts only
+inline void CopyBitmapRectTo(MyBitmap *sourceT, u32 offsetX, i32 offsetY, u32 color)
+{
+    u32 bg = 0x00 << 24 | bgGrey << 16 | bgGrey << 8 | bgGrey;
     u32 *row = (u32 *)canvas.pixels + offsetX + offsetY * canvas.width;
     u32 *source = (u32 *)sourceT->pixels + sourceT->width * (sourceT->height - 1);
-    for (u32 y = 0; y < sourceT->height; y += 1)
+    for (i32 y = 0; y < sourceT->height; y += 1)
     {
         u32 *pixel = row;
         u32 *sourcePixel = source;
-        for (u32 x = 0; x < sourceT->width; x += 1)
+        for (i32 x = 0; x < sourceT->width; x += 1)
         {
             // stupid fucking logic needs to replaced
-            if (*sourcePixel != 0xff000000 && (y + offsetY) > 0 && (x + offsetX) > 0 && y + offsetY < canvas.height && x + offsetX < canvas.width)
-                *pixel = *sourcePixel;
+            if (*sourcePixel != bg &&
+                *sourcePixel != 0 &&
+                (y + offsetY) > 0 &&
+                (x + offsetX) > 0 &&
+                y + offsetY < canvas.height &&
+                x + offsetX < canvas.width)
+                // *pixel = *sourcePixel;
+                *pixel = AlphaBlendGreyscale(*pixel, *sourcePixel, color);
+
             sourcePixel += 1;
             pixel += 1;
         }
@@ -348,15 +519,15 @@ inline void CopyBitmapRectTo(MyBitmap *sourceT, u32 offsetX, u32 offsetY)
     }
 }
 
-void RenderTextLine(char *str, i32 len, u32 x, u32 y)
+void RenderTextLine(char *str, i32 len, i32 x, i32 y, u32 color)
 {
     for (i32 i = 0; i < len; i++)
     {
-        MyBitmap *bitmap = &currentFont->textures[*(str + i)];
+        MyBitmap *bitmap = &font.textures[*(str + i)];
         if (x >= 0 && x - bitmap->width < view.x && y >= 0 && y - bitmap->height < view.y)
-            CopyBitmapRectTo(bitmap, x, y);
+            CopyBitmapRectTo(bitmap, x, y, color);
 
-        x += currentFont->charWidth;
+        x += font.charWidth;
     }
 }
 
@@ -381,18 +552,11 @@ f32 lerp(f32 from, f32 to, f32 factor)
     return from * (1 - factor) + to * factor;
 }
 
-FontData font = {0};
-FontData linesFont = {0};
-FontData linesFontHighlihgt = {0};
-
-i32 padding = 20;
-
 void DrawScrollBar()
 {
-    f32 pageHeight = linesCount * font.charHeight + padding * 2;
     if ((f32)view.y < pageHeight)
     {
-        f32 scrollbarHeight = ((f32)view.y * (f32)view.y) / (f32)pageHeight;
+        f32 scrollbarHeight = ((f32)view.y * (f32)view.y) / pageHeight;
 
         f32 maxOffset = pageHeight - view.y;
         f32 maxScrollY = (f32)view.y - scrollbarHeight;
@@ -414,7 +578,7 @@ f32 clamp(f32 val, f32 min, f32 max)
 
 f32 ClampOffset(f32 val)
 {
-    f32 maxOffset = MaxF32(linesCount * font.charHeight + padding * 2 - view.y, 0);
+    f32 maxOffset = MaxF32(pageHeight - view.y, 0);
     return clamp(val, 0, maxOffset);
 }
 
@@ -422,16 +586,17 @@ void ScrollIntoView()
 {
     i32 itemsToLookAhead = 3;
 
+    i32 lineHeightPx = RoundI32((f32)font.charHeight * lineHeight);
+
     i32 cursorY =
-        cursor.line * font.charHeight + padding;
+        cursor.line * lineHeightPx + padding;
 
-    // TODO: this is not precise, but just some space to look forward.
-    i32 spaceToLookAhead = font.charHeight * itemsToLookAhead;
+    i32 spaceToLookAhead = lineHeightPx * itemsToLookAhead;
 
-    if (view.y < linesCount * font.charHeight)
+    if (view.y < linesCount * lineHeightPx)
     {
         if (
-            cursorY + spaceToLookAhead + (i32)font.charHeight - view.y >
+            cursorY + spaceToLookAhead + (i32)lineHeightPx - view.y >
             scrollOffset.target)
         {
             scrollOffset.target = ClampOffset(cursorY - view.y + spaceToLookAhead);
@@ -441,16 +606,39 @@ void ScrollIntoView()
             i32 targetOffset = cursorY - spaceToLookAhead;
             scrollOffset.target = ClampOffset(targetOffset);
         }
-        // else
-        // {
-        //     scrollOffset.target = (state.scrollOffset);
-        // }
+    }
+}
+
+void CenterOnRowIfNotVisible()
+{
+    i32 itemsToLookAhead = 3;
+
+    i32 lineHeightPx = RoundI32((f32)font.charHeight * lineHeight);
+
+    i32 cursorY =
+        cursor.line * lineHeightPx + padding;
+
+    i32 spaceToLookAhead = lineHeightPx * itemsToLookAhead;
+
+    if (view.y < linesCount * lineHeightPx)
+    {
+        if (
+            cursorY + spaceToLookAhead + (i32)lineHeightPx - view.y >
+            scrollOffset.target)
+        {
+            scrollOffset.target = ClampOffset(cursorY - view.y / 2);
+        }
+        else if (cursorY - spaceToLookAhead < scrollOffset.target)
+        {
+            scrollOffset.target = ClampOffset(cursorY - view.y / 2);
+        }
     }
 }
 
 void Draw()
 {
     u64 end = GetPerfCounter();
+
     f32 deltaMs = ((f32)(end - start) / frequency * 1000);
 
     UpdateSpring(&scrollOffset, deltaMs / 1000);
@@ -466,24 +654,55 @@ void Draw()
 
     char *bufferP = buffer.content;
 
-    i32 leftPadding = padding + digitsForLines * font.charWidth;
+    i32 leftPadding = padding + font.charWidth * 2 + digitsForLines * font.charWidth;
 
     i32 x = leftPadding;
     i32 y = padding;
 
-    currentFont = &font;
+    i32 charRendered = 0;
+
+    u32 color = colorScheme.font;
+
+    u32 currentSearchEntryIndex = 0;
+    EntryFound *found = NULL;
+
+    i32 lineHeightPx = RoundI32((f32)font.charHeight * lineHeight);
+
+    u32 cursorX = leftPadding + cursor.lineOffset * font.charWidth - 1;
+    f32 offsetY = ((lineHeight - 1.0f) / 2.0f) * font.charHeight;
+    u32 cursorY = padding + cursor.line * lineHeightPx - offsetY - scrollOffset.current;
+
+    PaintRect(0, cursorY, view.x, lineHeightPx, colorScheme.currentLineBg);
 
     while (*bufferP != '\0')
     {
+        if (currentSearchEntryIndex < entriesCount)
+            found = &entriesAt[currentSearchEntryIndex];
+        else
+            found = NULL;
+
+        if (mode == Search && found && charRendered >= found->at && charRendered < found->at + found->len)
+        {
+            if (currentSearchEntryIndex == currentEntry)
+                color = colorScheme.searchResultActive;
+            else
+                color = colorScheme.searchResult;
+        }
+        else
+        {
+            color = colorScheme.font;
+        }
+
         char ch = *bufferP;
 
         if (ch == '\n')
         {
             x = leftPadding;
-            y += font.charHeight;
+            y += lineHeightPx;
         }
         else
         {
+
             MyBitmap *bitmap;
             if (*bufferP >= ' ' && *bufferP < MAX_CHAR_CODE)
                 bitmap = &font.textures[*bufferP];
@@ -491,36 +710,43 @@ void Draw()
                 bitmap = &font.textures['_'];
 
             i32 by = y - scrollOffset.current;
-            if (by > 0 && by < view.y)
-                CopyBitmapRectTo(bitmap, x, y - scrollOffset.current);
+            if (by > -lineHeightPx && by < view.y)
+                CopyBitmapRectTo(bitmap, x, y - scrollOffset.current, color);
 
             x += font.charWidth;
         }
+
         bufferP++;
+        charRendered++;
+
+        if (found && charRendered >= found->at + found->len)
+        {
+            currentSearchEntryIndex++;
+        }
     }
 
     char digits[20] = {0};
     i32 lineLength = 0;
     for (i32 i = 0; i < linesCount; i++)
     {
-        FontData *lineFont = (i == cursor.line) ? &linesFontHighlihgt : &linesFont;
+        u32 color = (i == cursor.line) ? colorScheme.lineCurrent : colorScheme.line;
 
         lineLength = AppendI32(i + 1, digits);
         for (i32 j = 0; j < lineLength; j++)
         {
 
-            MyBitmap *bitmap = &lineFont->textures[digits[j]];
-            i32 by = padding + i * font.charHeight - scrollOffset.current;
-            if (by > 0 && by < view.y)
-                CopyBitmapRectTo(bitmap, leftPadding - font.charWidth * (2 + (lineLength - j - 1)), by);
+            MyBitmap *bitmap = &font.textures[digits[j]];
+            i32 by = padding + i * lineHeightPx - scrollOffset.current;
+            if (by > -lineHeightPx && by < view.y)
+                CopyBitmapRectTo(bitmap, leftPadding - font.charWidth * (3 + (lineLength - j - 1)), by, color);
         }
     }
 
-    u32 cursorColor = mode == Normal ? 0xff22ff22 : 0xffff2222;
+    u32 cursorColor = mode == Normal   ? 0xff22ff22
+                      : mode == Insert ? 0xffff2222
+                                       : 0xff777777;
 
-    PaintRect(leftPadding + cursor.lineOffset * font.charWidth - 1,
-              padding + cursor.line * font.charHeight - scrollOffset.current, 2,
-              font.charHeight, cursorColor);
+    PaintRect(cursorX, cursorY, 2, lineHeightPx, cursorColor);
 
     char label[255] = {0};
     u32 pos = 0;
@@ -550,18 +776,47 @@ void Draw()
     pos += AppendStr(" size:", label + pos);
     pos += AppendI32(buffer.size, label + pos);
     pos += AppendStr(" ", label + pos);
+
     if (deltaMs < 10)
         pos += AppendStr(" ", label + pos);
 
     pos += AppendI32((i32)deltaMs, label + pos);
     pos += AppendStr("ms", label + pos);
 
-    RenderTextLine(label, pos - 1, view.x - 5 - pos * font.charWidth, view.y - 5 - currentFont->charHeight);
+    i32 footerPadding = 5;
+    i32 footerHeight = font.charHeight + footerPadding * 2;
+    PaintRect(0, view.y - footerHeight, view.x, footerHeight, 0x303030);
+    RenderTextLine(label, pos - 1, view.x - 5 - pos * font.charWidth, view.y - 5 - font.charHeight, colorScheme.font);
+    RenderTextLine(filename, mystrlen(filename), footerPadding, view.y - font.charHeight - footerPadding, 0xffffff); 
+
+    if (mode == Search)
+    {
+        RenderTextLine(searchTerm, searchLen, view.x - 200, 4, colorScheme.searchResult);
+
+        pos = 0;
+        pos += AppendI32(currentEntry + 1, label + pos);
+        pos += AppendStr(" of ", label + pos);
+        pos += AppendI32(entriesCount, label + pos);
+
+        RenderTextLine(label, pos, view.x - (pos + 1) * font.charWidth - 4, 4, colorScheme.font);
+    }
 
     DrawScrollBar();
     StretchDIBits(dc, 0, 0, view.x, view.y, 0, 0, view.x, view.y, canvas.pixels, &bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
 
     start = end;
+}
+
+void OnEnter()
+{
+    i32 identation = GetIdentationLevel();
+    InsertCharAtCurrentPosition('\n');
+
+    while (identation > 0)
+    {
+        InsertCharAtCurrentPosition(' ');
+        identation--;
+    }
 }
 
 LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
@@ -587,12 +842,24 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         if (mode == Insert)
         {
             if (isJustMovedToInsert)
-            {
                 isJustMovedToInsert = 0;
-            }
-            else if (wParam >= ' ' || wParam == '\r' || wParam == '\n')
+            else if (wParam == '\r' || wParam == '\n')
+                OnEnter();
+            else if (wParam >= ' ')
+                InsertCharAtCurrentPosition(wParam);
+        }
+
+        if (mode == Search)
+        {
+            if (isJustMovedToInsert)
+                isJustMovedToInsert = 0;
+            else if (wParam >= ' ')
             {
-                InsertCharAtCurrentPosition(wParam == '\r' ? '\n' : wParam);
+                searchTerm[searchLen++] = wParam;
+                FindEntries();
+
+                SetCursorGlobalPos(entriesAt[currentEntry].at);
+                CenterOnRowIfNotVisible();
             }
         }
 
@@ -600,7 +867,7 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_MOUSEWHEEL:
         // zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-        if (view.y < linesCount * font.charHeight + padding * 2)
+        if (view.y < pageHeight)
             scrollOffset.target = ClampOffset(scrollOffset.target - GET_WHEEL_DELTA_WPARAM(wParam));
         break;
 
@@ -614,15 +881,33 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         if (wParam == VK_MENU)
             isAltPressed = 1;
 
-        // else if (wParam == VK_SHIFT)
-        //     isShiftPressed = 1;
-        else if (isAltPressed && wParam == 'J')
+        if (mode == Normal)
         {
-            SwapLineDown();
+            if (isAltPressed && wParam == 'J')
+                SwapLineDown();
+            else if (isAltPressed && wParam == 'K')
+                SwapLineUp();
         }
-        else if (isAltPressed && wParam == 'K')
+        else if (mode == Search)
         {
-            SwapLineUp();
+            if (isAltPressed && wParam == 'J')
+            {
+                if (currentEntry < entriesCount - 1)
+                {
+                    currentEntry++;
+                    SetCursorGlobalPos(entriesAt[currentEntry].at);
+                    CenterOnRowIfNotVisible();
+                }
+            }
+            else if (isAltPressed && wParam == 'K')
+            {
+                if (currentEntry > 0)
+                {
+                    currentEntry--;
+                    SetCursorGlobalPos(entriesAt[currentEntry].at);
+                    CenterOnRowIfNotVisible();
+                }
+            }
         }
 
         break;
@@ -641,7 +926,6 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 
         if (mode == Normal)
         {
-
             if (wParam == '0')
                 JumpToStartOfLine();
             if (wParam == '4' && isShiftPressed)
@@ -650,9 +934,15 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 JumpToFirstNonBlackCharOfLine();
 
             if (wParam == 'G' && isShiftPressed)
+            {
                 JumpToEndOfFile();
+                ScrollIntoView();
+            }
             else if (wParam == 'G')
+            {
                 JumpToStartOfFile();
+                ScrollIntoView();
+            }
 
             if (wParam == 'O' && isShiftPressed)
                 InsertNewLineAbove();
@@ -660,10 +950,16 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 InsertNewLineBelow();
 
             if (wParam == 'L')
+            {
                 SetCursorGlobalPos(cursor.global + 1);
+                ScrollIntoView();
+            }
 
             if (wParam == 'H')
+            {
                 SetCursorGlobalPos(cursor.global - 1);
+                ScrollIntoView();
+            }
 
             if (wParam == 'Z')
                 RemoveCharFromLeft();
@@ -671,11 +967,17 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             if (wParam == 'X')
                 RemoveCharFromRight();
 
-            else if (wParam == 'J')
+            if (wParam == 'J')
+            {
                 GoDown();
+                ScrollIntoView();
+            }
 
             if (wParam == 'K')
+            {
                 GoUp();
+                ScrollIntoView();
+            }
 
             if (wParam == 'D')
                 RemoveLine();
@@ -694,7 +996,7 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 
             if (wParam == VK_RETURN)
             {
-                InsertCharAtCurrentPosition('\n');
+                OnEnter();
             }
 
             if (wParam == VK_BACK)
@@ -707,6 +1009,16 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 SaveFile();
             }
+
+            if ((wParam == 'F' && isCtrlPressed))
+            {
+                mode = Search;
+                entriesCount = 0;
+                searchLen = 0;
+            }
+
+            // if (wParam == VK_SPACE)
+            //     SetupFonts(!isClearType);
         }
         else if (mode == Insert)
         {
@@ -719,6 +1031,22 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 if (cursor.global > 0)
                     RemoveCharFromLeft();
+            }
+        }
+        else if (mode == Search)
+        {
+            if (wParam == VK_ESCAPE || (wParam == 'F' && isCtrlPressed))
+            {
+                mode = Normal;
+            }
+
+            if (wParam == VK_BACK && searchLen > 0)
+            {
+                searchLen--;
+                FindEntries();
+
+                SetCursorGlobalPos(entriesAt[currentEntry].at);
+                CenterOnRowIfNotVisible();
             }
         }
 
@@ -774,12 +1102,12 @@ void WinMainCRTStartup()
     InitAnimations();
     InitFontSystem();
 
-    InitFontData(&font, FontInfoClearType("Consolas", 14, 0xfff0f0f0, (0xff << 24) | (bgGrey << 16) | (bgGrey << 8) | (bgGrey << 0)), &fontArena);
-    InitFontData(&linesFont, FontInfoClearType("Consolas", 14, 0xff606060, (0xff << 24) | (bgGrey << 16) | (bgGrey << 8) | (bgGrey << 0)), &fontArena);
-    InitFontData(&linesFontHighlihgt, FontInfoClearType("Consolas", 14, 0xffC0C0C0, (0xff << 24) | (bgGrey << 16) | (bgGrey << 8) | (bgGrey << 0)), &fontArena);
+    SetupFonts();
 
     buffer = ReadFileIntoDoubledSizedBuffer(filename);
     OnTextChanged();
+
+    FindEntries();
     isSaved = 1;
 
     frequency = GetPerfFrequency();
@@ -789,6 +1117,8 @@ void WinMainCRTStartup()
     HWND window = OpenWindow(OnEvent, (V3f){g, g, g}, "Editor");
     dc = GetDC(window);
 
+    SetCursorGlobalPos(entriesAt[currentEntry].at);
+    ScrollIntoView();
     while (isRunning)
     {
         MSG msg;
