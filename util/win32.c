@@ -44,7 +44,7 @@ void *memmove(void *dest, const void *src, size_t n)
 
 int _fltused = 0x9875;
 
-HWND OpenWindow(WNDPROC OnEvent, V3f bgColor, char *title)
+HWND OpenWindow(WNDPROC OnEvent, u32 bgColor, char *title)
 {
     HINSTANCE instance = GetModuleHandle(0);
     WNDCLASSW windowClass = {0};
@@ -55,7 +55,8 @@ HWND OpenWindow(WNDPROC OnEvent, V3f bgColor, char *title)
     windowClass.hCursor = LoadCursor(0, IDC_ARROW);
     // not using COLOR_WINDOW + 1 because it doesn't fucking work
     // this line fixes a flash of a white background for 1-2 frames during start
-    windowClass.hbrBackground = CreateSolidBrush(Vec3fToHex(bgColor));
+    u32 c = ((bgColor & 0xff) << 16) | (bgColor & 0x00ff00) | ((bgColor & 0xff0000) >> 16);
+    windowClass.hbrBackground = CreateSolidBrush(c);
     // };
     RegisterClassW(&windowClass);
 
@@ -256,4 +257,26 @@ inline i64 GetPerfCounter()
     LARGE_INTEGER res;
     QueryPerformanceCounter(&res);
     return res.QuadPart;
+}
+
+// https://www.codeproject.com/Articles/2242/Using-the-Clipboard-Part-I-Transferring-Simple-Tex
+void SetClipboard(HWND window, char *start, i32 len)
+{
+    if (OpenClipboard(window))
+    {
+        EmptyClipboard();
+
+        HGLOBAL hClipboardData = GlobalAlloc(GMEM_DDESHARE, len + 1);
+
+        char *pchData = (char *)GlobalLock(hClipboardData);
+
+        memmove(pchData, start, len);
+        pchData[len] = '\0';
+
+        GlobalUnlock(hClipboardData);
+
+        SetClipboardData(CF_TEXT, hClipboardData);
+
+        CloseClipboard();
+    }
 }

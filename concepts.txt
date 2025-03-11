@@ -1,5 +1,4 @@
 Write tasks for the editor
-Write a game
  y Scroll
  y Vertical movement
  y Jump words
@@ -21,3 +20,15 @@ Write a game
  - File picker
  - Screen split
  - Multiple cursors
+
+
+Bugs
+ - Adding new line below at the end of the file breaks app behaviour
+
+
+Missing Crutial features
+ - Copy\Paste text
+   - Requires ability to select text 
+ - Replace selected text
+ - Move selected lines up and down
+ - Undo\redo

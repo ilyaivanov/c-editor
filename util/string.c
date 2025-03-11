@@ -101,15 +101,7 @@ void InsertChars(StringBuffer *buffer, char *chars, i32 len, i32 at)
 
     char *from = buffer->content + at;
     char *to = buffer->content + at + len;
-    i32 l = buffer->size - at;
-    while (l >= 0)
-    {
-        *to = *from;
-
-        to++;
-        from++;
-        l--;
-    }
+    memmove(to, from, buffer->size - at);
 
     for (i32 i = at; i < at + len; i++)
     {

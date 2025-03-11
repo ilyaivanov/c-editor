@@ -5,9 +5,54 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Document</title>
+        <style>
+            body {
+                background-color: #080808;
+                /* background-color: #086eb4; */
+                color: #f0f0f0;
+                font-size: 14px;
+                font-family: Consolas;
+            }
+
+            .box {
+                position: absolute;
+                width: 50px;
+                height: 50px;
+                top: 18px;
+
+                animation: move 1000ms both alternate infinite;
+            }
+            .container {
+                position: absolute;
+                animation: move2 1000ms both alternate infinite;
+            }
+
+            @keyframes move {
+                0% {
+                    left: 18px;
+                    background-color: red;
+                }
+                100% {
+                    left: 22px;
+                    background-color: blue;
+                }
+            }
+            @keyframes move2 {
+                0% {
+                    top: 10px;
+                }
+                100% {
+                    top: 12px;
+                }
+            }
+        </style>
     </head>
     <body>
-        <script>
+        <div class="box"></div>
+        <div class="container">
+            <span>Write a game</span>
+        </div>
+        <!-- <script>
             const url = ".\\sounds\\file.wav";
             // const s = new Audio(".\\sounds\\file.wav");
             // window.addEventListener("mousedown", () => {
@@ -38,6 +83,6 @@
 
             // Play it
             document.addEventListener("mousedown", playFireSound);
-        </script>
+        </script> -->
     </body>
 </html>

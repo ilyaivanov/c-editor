@@ -20,23 +20,7 @@ u64 start;
 
 f32 lineHeight = 1.2f;
 i32 fontSize = 13;
-
-// u32 isClearType = 0;
-
-i32 bgGrey = 0x08;
-// i32 fontGrey = 0xf0;
-
-// char *filename = ".\\test.txt";
-// char *filename = ".\\perf.txt";
-// char *filename = ".\\concepts.txt";
-char *filename = ".\\main_editor.c";
-i32 mystrlen(char* str)
-{
-   i32 len = 0;
-   while(str[len] != '\0')
-      len++;
-   return len;
-}
+Spring scrollOffset = {0};
 
 typedef struct CursorPos
 {
@@ -46,6 +30,19 @@ typedef struct CursorPos
 } CursorPos;
 
 CursorPos cursor;
+
+i32 currentFile = -1;
+char *files[] = {
+    ".\\main_editor.c",
+    ".\\concepts.txt"};
+
+i32 mystrlen(char *str)
+{
+    i32 len = 0;
+    while (str[len] != '\0')
+        len++;
+    return len;
+}
 
 typedef enum Mode
 {
@@ -81,6 +78,9 @@ typedef struct ColorScheme
     u32 line;
     u32 lineCurrent;
     u32 currentLineBg;
+    u32 footerBg;
+    u32 bg;
+    u32 selectionBg;
 } ColorScheme;
 
 i32 padding = 20;
@@ -97,18 +97,19 @@ typedef struct EntryFound
 
 EntryFound entriesAt[1024 * 10] = {0};
 
-Spring scrollOffset = {0};
-
 void SetupFonts()
 {
     InitFontData(&font, FontInfoAntialiased("Consolas", fontSize), &fontArena);
 
+    colorScheme.bg = 0x080808;
     colorScheme.font = 0xffffff;
     colorScheme.searchResult = 0x7070f0;
     colorScheme.searchResultActive = 0x40f040;
     colorScheme.line = 0x606060;
     colorScheme.lineCurrent = 0xC0C0C0;
     colorScheme.currentLineBg = 0x202020;
+    colorScheme.footerBg = 0x202020;
+    colorScheme.selectionBg = 0x4B5460;
 }
 
 inline char ToCharLower(char ch)
@@ -346,8 +347,28 @@ void SwapLineUp()
 
 void SaveFile()
 {
-    WriteMyFile(filename, buffer.content, buffer.size);
+    WriteMyFile(files[currentFile], buffer.content, buffer.size);
     isSaved = 1;
+}
+
+void LoadFile(i32 fileNumber)
+{
+    if (currentFile != fileNumber)
+    {
+        if (buffer.content)
+        {
+            SaveFile();
+            VirtualFreeMemory(buffer.content);
+        }
+
+        buffer = ReadFileIntoDoubledSizedBuffer(files[fileNumber]);
+        scrollOffset.target = 0;
+        scrollOffset.current = 0;
+        SetCursorGlobalPos(0);
+        OnTextChanged();
+        currentFile = fileNumber;
+        isSaved = 1;
+    }
 }
 
 void InsertCharAtCurrentPosition(char ch)
@@ -492,7 +513,6 @@ inline u32 AlphaBlendGreyscale(u32 destination, u32 source, u32 color)
 // Antialised fonts only
 inline void CopyBitmapRectTo(MyBitmap *sourceT, u32 offsetX, i32 offsetY, u32 color)
 {
-    u32 bg = 0x00 << 24 | bgGrey << 16 | bgGrey << 8 | bgGrey;
     u32 *row = (u32 *)canvas.pixels + offsetX + offsetY * canvas.width;
     u32 *source = (u32 *)sourceT->pixels + sourceT->width * (sourceT->height - 1);
     for (i32 y = 0; y < sourceT->height; y += 1)
@@ -502,8 +522,7 @@ inline void CopyBitmapRectTo(MyBitmap *sourceT, u32 offsetX, i32 offsetY, u32 co
         for (i32 x = 0; x < sourceT->width; x += 1)
         {
             // stupid fucking logic needs to replaced
-            if (*sourcePixel != bg &&
-                *sourcePixel != 0 &&
+            if (*sourcePixel != 0 &&
                 (y + offsetY) > 0 &&
                 (x + offsetX) > 0 &&
                 y + offsetY < canvas.height &&
@@ -635,6 +654,23 @@ void CenterOnRowIfNotVisible()
     }
 }
 
+void ClearToBg()
+{
+    u32 *bytes = canvas.pixels;
+    u32 count = canvas.width * canvas.height;
+    while (count--)
+    {
+        *bytes++ = colorScheme.bg;
+    }
+}
+
+void CopyCurrentLine(HWND window)
+{
+    i32 start = FindLineStart(cursor.global);
+    i32 end = FindLineEnd(cursor.global);
+    SetClipboard(window, &buffer.content[start], end - start + 1);
+}
+
 void Draw()
 {
     u64 end = GetPerfCounter();
@@ -642,7 +678,7 @@ void Draw()
     f32 deltaMs = ((f32)(end - start) / frequency * 1000);
 
     UpdateSpring(&scrollOffset, deltaMs / 1000);
-    memset(canvas.pixels, bgGrey, canvas.bytesPerPixel * canvas.width * canvas.height);
+    ClearToBg();
 
     i32 linesCountTemp = linesCount;
     i32 digitsForLines = 0;
@@ -785,9 +821,10 @@ void Draw()
 
     i32 footerPadding = 5;
     i32 footerHeight = font.charHeight + footerPadding * 2;
-    PaintRect(0, view.y - footerHeight, view.x, footerHeight, 0x303030);
+    PaintRect(0, view.y - footerHeight, view.x, footerHeight, colorScheme.footerBg);
     RenderTextLine(label, pos - 1, view.x - 5 - pos * font.charWidth, view.y - 5 - font.charHeight, colorScheme.font);
-    RenderTextLine(filename, mystrlen(filename), footerPadding, view.y - font.charHeight - footerPadding, 0xffffff); 
+    char *filename = files[currentFile];
+    RenderTextLine(filename, mystrlen(filename), footerPadding, view.y - font.charHeight - footerPadding, 0xffffff);
 
     if (mode == Search)
     {
@@ -817,6 +854,21 @@ void OnEnter()
         InsertCharAtCurrentPosition(' ');
         identation--;
     }
+}
+
+// TODO: this about how to extract this into win32, maybe use Arena to copy data there before closing clipboard
+void PasteFromClipboard(HWND window)
+{
+    OpenClipboard(window);
+    HANDLE hClipboardData = GetClipboardData(CF_TEXT);
+    char *pchData = (char *)GlobalLock(hClipboardData);
+
+    i32 len = mystrlen(pchData);
+    InsertChars(&buffer, pchData, len, cursor.global);
+    SetCursorGlobalPos(cursor.global + len);
+    GlobalUnlock(hClipboardData);
+
+    CloseClipboard();
 }
 
 LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
@@ -877,6 +929,7 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             return 0;
         }
         break;
+
     case WM_SYSKEYDOWN:
         if (wParam == VK_MENU)
             isAltPressed = 1;
@@ -887,6 +940,13 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 SwapLineDown();
             else if (isAltPressed && wParam == 'K')
                 SwapLineUp();
+        }
+        else if (mode == Insert)
+        {
+            if (wParam == 'P' && isAltPressed)
+            {
+                PasteFromClipboard(window);
+            }
         }
         else if (mode == Search)
         {
@@ -926,6 +986,10 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 
         if (mode == Normal)
         {
+            if (wParam == '1' && isCtrlPressed)
+                LoadFile(0);
+            if (wParam == '2' && isCtrlPressed)
+                LoadFile(1);
             if (wParam == '0')
                 JumpToStartOfLine();
             if (wParam == '4' && isShiftPressed)
@@ -973,6 +1037,11 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 ScrollIntoView();
             }
 
+            if (wParam == 'Y')
+            {
+                CopyCurrentLine(window);
+            }
+
             if (wParam == 'K')
             {
                 GoUp();
@@ -987,6 +1056,9 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 
             if (wParam == 'B')
                 JumpWordBack();
+
+            if (wParam == ' ')
+                InsertCharAtCurrentPosition(' ');
 
             if (wParam == 'I')
             {
@@ -1017,8 +1089,14 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 searchLen = 0;
             }
 
-            // if (wParam == VK_SPACE)
-            //     SetupFonts(!isClearType);
+            if (wParam == 'P')
+            {
+                PasteFromClipboard(window);
+            }
+
+            if (wParam == VK_SPACE)
+            {
+            }
         }
         else if (mode == Insert)
         {
@@ -1104,7 +1182,8 @@ void WinMainCRTStartup()
 
     SetupFonts();
 
-    buffer = ReadFileIntoDoubledSizedBuffer(filename);
+    LoadFile(0);
+    //    buffer = ReadFileIntoDoubledSizedBuffer(filename);
     OnTextChanged();
 
     FindEntries();
@@ -1113,12 +1192,12 @@ void WinMainCRTStartup()
     frequency = GetPerfFrequency();
     start = GetPerfCounter();
 
-    f32 g = (f32)bgGrey / 255;
-    HWND window = OpenWindow(OnEvent, (V3f){g, g, g}, "Editor");
+    HWND window = OpenWindow(OnEvent, colorScheme.bg, "Editor");
     dc = GetDC(window);
 
     SetCursorGlobalPos(entriesAt[currentEntry].at);
     ScrollIntoView();
+
     while (isRunning)
     {
         MSG msg;
