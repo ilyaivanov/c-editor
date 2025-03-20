@@ -44,19 +44,19 @@ inline void MoveMyMemory(char *source, char *dest, int length)
 
 void DoubleCapacityIfFull(StringBuffer *buffer)
 {
-    if (buffer->size >= buffer->capacity)
-    {
-        char *currentStr = buffer->content;
-        buffer->capacity = (buffer->capacity == 0) ? 4 : (buffer->capacity * 2);
-        buffer->content = VirtualAllocateMemory(buffer->capacity);
-        MoveMyMemory(currentStr, buffer->content, buffer->size);
-        VirtualFreeMemory(currentStr);
-    }
+    char *currentStr = buffer->content;
+    buffer->capacity = (buffer->capacity == 0) ? 4 : (buffer->capacity * 2);
+    buffer->content = VirtualAllocateMemory(buffer->capacity);
+    MoveMyMemory(currentStr, buffer->content, buffer->size);
+    VirtualFreeMemory(currentStr);
 }
 
 void InsertCharAt(StringBuffer *buffer, i32 at, i32 ch)
 {
-    DoubleCapacityIfFull(buffer);
+    if (buffer->size >= buffer->capacity)
+    {
+        DoubleCapacityIfFull(buffer);
+    }
 
     buffer->size += 1;
     MoveBytesRight(buffer->content + at, buffer->size - at);
@@ -108,7 +108,6 @@ void InsertChars(StringBuffer *buffer, char *chars, i32 len, i32 at)
         buffer->content[i] = chars[i - at];
     }
 
-    buffer->size += len;
     PlaceLineEnd(buffer);
 }
 

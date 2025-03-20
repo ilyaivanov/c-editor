@@ -1,26 +1,12 @@
 #pragma once
-#include <stdint.h>
 #include "sincos.c"
+#include "common.c"
 
 #define PI 3.14159265359f
 #define ONE_OVER_SQUARE_ROOT_OF_TWO 0.70710678118f
 
 #define KB(v) (1024 * (v))
 #define MB(v) (1024 * KB(v))
-
-typedef int8_t i8;
-
-typedef int16_t i16;
-typedef int32_t i32;
-typedef int64_t i64;
-
-typedef uint8_t u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-typedef float f32;
-typedef double f64;
 
 // clang-format off
 typedef struct V2i { i32 x, y;     } V2i;

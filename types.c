@@ -1,6 +1,8 @@
 #pragma once
 #include "util/math.c"
 
+#include "common.c"
+
 #define ArrayLength(array) (sizeof(array) / sizeof(array[0]))
 
 #define Assert(cond)   \
@@ -9,14 +11,6 @@
         *(u32 *)0 = 0; \
     }
 #define Fail(msg) Assert(0)
-
-typedef struct MyBitmap
-{
-    i32 width;
-    i32 height;
-    i32 bytesPerPixel;
-    u32 *pixels;
-} MyBitmap;
 
 inline u32 Vec3fToHex(V3f vec)
 {

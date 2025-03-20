@@ -23,12 +23,16 @@ Write tasks for the editor
 
 
 Bugs
- - Adding new line below at the end of the file breaks app behaviour
+ - Removing last line places cursor at the improper position
 
-
-Missing Crutial features
+Notepad Features
  - Copy\Paste text
+   y Figure out how to work with the Clipboard buffer
    - Requires ability to select text 
  - Replace selected text
- - Move selected lines up and down
  - Undo\redo
+ 
+ Monday
+ - Write Undo/Redo functionality
+ - Write file browser
+ - Move selected lines up and down

@@ -21,7 +21,7 @@ set CompilerOptionsDev=/Zi /Od
 set CompilerOptionsProd=/O2 
 
 set LinkerOptions=/nodefaultlib /subsystem:windows /STACK:0x100000,0x100000 /incremental:no
-set Libs=user32.lib kernel32.lib gdi32.lib opengl32.lib dwmapi.lib winmm.lib shell32.lib ole32.lib uuid.lib
+set Libs=user32.lib kernel32.lib gdi32.lib opengl32.lib dwmapi.lib winmm.lib shell32.lib ole32.lib uuid.lib ucrt.lib
 
 IF "%arg1%" == "p" (
     echo Production build
@@ -35,7 +35,7 @@ IF NOT "%arg1%" == "p" (
 
 IF NOT "%arg1%" == "b" IF NOT "%arg2%" == "b" (
     echo Running...
-    call .\main_editor.exe
+    call .\main.exe
 )
 
 popd

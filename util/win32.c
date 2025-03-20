@@ -64,7 +64,7 @@ HWND OpenWindow(WNDPROC OnEvent, u32 bgColor, char *title)
     int screenWidth = GetDeviceCaps(dc, HORZRES);
     int screenHeight = GetDeviceCaps(dc, VERTRES);
 
-    int windowWidth = (i32)((f32)screenWidth / 3.0f);
+    int windowWidth = (i32)((f32)screenWidth / 2.0f);
     int windowHeight = 1500;
 
     // HWND window  = CreateWindowExW(

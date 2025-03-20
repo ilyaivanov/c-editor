@@ -1,0 +1,45 @@
+Working on an Editor
+- TS API integration
+
+Basic Stuff
+- word actions
+- selection
+- multiple cursors
+- 
+
+Projects 
+ - BagPack + Brotato
+ - HexaPack + HexMerge
+ - Code Editor
+
+
+
+
+
+
+
+
+
+https://natureofcode.com
+https://computerenhance.com
+https://pomax.github.io/bezierinfo
+https://webgl2fundamentals.org
+https://learnopengl.com
+https://thebookofshaders.com
+
+UkrKnowledge D3D on Windows 
+
+Calculus
+https://www.youtube.com/watch?v=rBVi_9qAKTU&list=PLybg94GvOJ9ELZEe9s2NXTKr41Yedbw7M
+
+Linear Algebra
+https://www.youtube.com/watch?v=csgNflj69-Y&list=PLybg94GvOJ9En46TNCXL2n6SiqRc_iMB8
+
+Handmade Hero spring animations
+https://www.youtube.com/watch?v=0MWGM4pte-I
+https://www.youtube.com/watch?v=uDqjIdI4bF4&t=1204s
+
+A (Mostly) Complete Guide to React Rendering Behavior
+https://blog.isquaredsoftware.com/2020/05/blogged-answers-a-mostly-complete-guide-to-react-rendering-behavior/#standard-render-behavior
+
+https://vim.rtorr.com/
