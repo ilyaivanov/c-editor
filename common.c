@@ -30,4 +30,4 @@ typedef struct
     i32 y;
     i32 width;
     i32 height;
-} MyRect2;
+} Rect;

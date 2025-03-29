@@ -151,3 +151,29 @@ i32 IndexBefore(StringBuffer *buffer, i32 before, char ch)
     }
     return -1;
 }
+
+u32 AreStringsEqual(char *s1, char *s2)
+{
+
+    while (*s1 == *s2 && (*s1 != '\0' && *s2 != '\0'))
+    {
+        s1++;
+        s2++;
+    }
+    if (*s1 == '\0' || *s2 == '\0')
+        return 1;
+
+    return 0;
+}
+
+u32 FindLastLineIndex(char *start, i32 len)
+{
+    char *last = start + len - 2;
+    while (*last != '\n' && last >= start)
+        last--;
+
+    if (*last == '\n')
+        return last - start + 1;
+
+    return last - start;
+}

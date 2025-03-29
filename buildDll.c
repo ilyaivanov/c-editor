@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-void RunAndCaptureOutput(char *outBuffer, int32_t *len)
+void RunAndCaptureOutput(char *outBuffer, int32_t *len, BOOL isProd)
 {
     HANDLE hReadPipe, hWritePipe;
     SECURITY_ATTRIBUTES sa = {sizeof(SECURITY_ATTRIBUTES), NULL, TRUE}; // Inheritable
@@ -24,7 +24,9 @@ void RunAndCaptureOutput(char *outBuffer, int32_t *len)
 
     PROCESS_INFORMATION pi;
 
-    if (!CreateProcess(NULL, "cmd.exe /C lib.bat", NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+    u8 *cmd = isProd ? "cmd.exe /C lib.bat p" : "cmd.exe /C lib.bat";
+
+    if (!CreateProcess(NULL, cmd, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
     {
         CloseHandle(hReadPipe);
         CloseHandle(hWritePipe);
@@ -44,8 +46,13 @@ void RunAndCaptureOutput(char *outBuffer, int32_t *len)
 
     CloseHandle(hReadPipe);
     WaitForSingleObject(pi.hProcess, INFINITE);
+
+    // DWORD exitCode;
+    // GetExitCodeProcess(pi.hProcess, &exitCode);
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+    // return exitCode;
 }
 
 void RunWithoutOutput()

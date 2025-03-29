@@ -1,3 +1,13 @@
+Editor
+ - Text Editing
+    - Jump words
+    - Remove\Swap lines
+    - Selection 
+    - Working with Buffer
+    - Jump to start\end of the line
+    - Search 
+
+
 Working on an Editor
 - TS API integration
 

@@ -237,6 +237,16 @@ inline Mat4 LookAt(V3f eye, V3f center)
     return res;
 }
 
+inline i32 MinI32(i32 v1, i32 v2)
+{
+    return v1 < v2 ? v1 : v2;
+}
+
+inline i32 MaxI32(i32 v1, i32 v2)
+{
+    return v1 > v2 ? v1 : v2;
+}
+
 //
 //
 //

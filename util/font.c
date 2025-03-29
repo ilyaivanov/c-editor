@@ -201,6 +201,10 @@ void InitFontData(FontData *fontData, FontInfo fontInfo, Arena *arena)
         CopyRectTo(&fontCanvas, texture, fontInfo);
     }
 
+    // 1234567
+    // ✓✓✓✓✓✓✓
+    // 0x2713 ✓
+
     // {
     //     wchar_t dotCh = 0xb7; // ·
     //     int len = 1;
@@ -217,7 +221,6 @@ void InitFontData(FontData *fontData, FontInfo fontInfo, Arena *arena)
 
     //     CopyRectTo(&fontCanvas, texture, fontInfo);
     // }
-
     // {
     //     wchar_t dotCh = 0x00B6; // ¶
     //     int len = 1;

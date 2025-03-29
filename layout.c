@@ -19,19 +19,24 @@ void PaintRect(i32 x, i32 y, i32 width, i32 height, u32 color)
     }
 }
 
-inline void PaintAppRect(MyRect2 rect, u32 color)
+inline void PaintSquareAtCenter(i32 x, i32 y, i32 size, u32 color)
+{
+    PaintRect(x - size / 2, y - size / 2, size, size, color);
+}
+
+inline void PaintAppRect(Rect rect, u32 color)
 {
     PaintRect(rect.x, rect.y, rect.width, rect.height, color);
 }
 
-inline MyRect2 ShrinkFromBottom(MyRect2 rect, i32 val)
+inline Rect ShrinkFromBottom(Rect rect, i32 val)
 {
-    return (MyRect2){rect.x, rect.y, rect.width, rect.height - val};
+    return (Rect){rect.x, rect.y, rect.width, rect.height - val};
 }
 
-inline MyRect2 AppendAfterBottom(MyRect2 rect, i32 height)
+inline Rect AppendAfterBottom(Rect rect, i32 height)
 {
-    return (MyRect2){rect.x, rect.y + rect.height, rect.width, height};
+    return (Rect){rect.x, rect.y + rect.height, rect.width, height};
 }
 
 // inline void SplitVectically(AppRect rect, AppRect *left, AppRect *right)

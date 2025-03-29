@@ -2,4 +2,5 @@
 
 #include "common.c"
 
-typedef void RenderApp(MyBitmap *bitmap, MyRect2 *rect);
+typedef void RenderApp(MyBitmap *bitmap, Rect *rect);
+typedef void OnLibEvent(HWND window, u32 message, i64 wParam, i64 lParam);
