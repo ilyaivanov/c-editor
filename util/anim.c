@@ -18,20 +18,8 @@ void InitAnimations()
     damping = 1.7 * mysqrtf(stiffness);
 }
 
-Spring CreateSpring(f32 initialValue)
-{
-    return (Spring){
-        initialValue,
-        0,
-        initialValue,
-    };
-}
-
 void UpdateSpring(Spring *spring, f32 deltaTimeMs)
 {
-    // if (spring.isDone)
-    //     return;
-
     f32 displacement = spring->target - spring->current;
     f32 springForce = displacement * stiffness;
     f32 dampingForce = spring->velocity * damping;

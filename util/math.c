@@ -247,6 +247,20 @@ inline i32 MaxI32(i32 v1, i32 v2)
     return v1 > v2 ? v1 : v2;
 }
 
+inline f32 MaxF32(f32 v1, f32 v2)
+{
+    return v1 > v2 ? v1 : v2;
+}
+
+f32 clamp(f32 val, f32 min, f32 max)
+{
+    if (val < min)
+        return min;
+    if (val > max)
+        return max;
+    return val;
+}
+
 //
 //
 //

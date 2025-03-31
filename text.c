@@ -7,7 +7,9 @@
 typedef struct Text
 {
     StringBuffer buffer;
-    u32 globalPosition;
+    i32 globalPosition;
+
+    i32 selectionStart;
 
     // these are cached values, such that I don't need to find them on each frame
     u32 line;
@@ -31,10 +33,20 @@ void UpdateCursorOffset(Text *text)
     text->lineOffset = text->globalPosition - lineStartedAt;
 }
 
+inline BOOL IsKeyPressed(u32 code)
+{
+    return (GetKeyState(code) >> 15) & 1;
+}
+
 void SetCursorPosition(Text *text, u32 pos)
 {
     if (pos >= 0 && pos <= text->buffer.size)
     {
+        if (IsKeyPressed(VK_SHIFT) && text->selectionStart == -1)
+            text->selectionStart = text->globalPosition;
+        else if (!IsKeyPressed(VK_SHIFT))
+            text->selectionStart = -1;
+
         text->globalPosition = pos;
         UpdateCursorOffset(text);
     }
@@ -72,21 +84,6 @@ void GoUp(Text *text)
     i32 pos = prevPrevLine + text->lineOffset;
 
     SetCursorPosition(text, MinI32(pos, prev));
-}
-
-void RemoveCharFromLeft(Text *text)
-{
-    if (text->globalPosition > 0)
-    {
-        RemoveCharAt(&text->buffer, text->globalPosition - 1);
-        SetCursorPosition(text, text->globalPosition - 1);
-    }
-}
-
-void RemoveCharFromRight(Text *text)
-{
-    if (text->globalPosition < text->buffer.size)
-        RemoveCharAt(&text->buffer, text->globalPosition);
 }
 
 void InsertCharAtCurrentPosition(Text *text, char ch)
@@ -194,9 +191,28 @@ void InsertNewLineBelow(Text *text)
     InserSameCharAtCurrentPositionSeveralTimes(text, ' ', identation);
 }
 
+void RemoveSelection(Text *text)
+{
+    i32 left = MinI32(text->selectionStart, text->globalPosition);
+    i32 right = MaxI32(text->selectionStart, text->globalPosition);
+
+    RemoveChars(&text->buffer, left, right - 1);
+    SetCursorPosition(text, left);
+    text->selectionStart = -1;
+}
+
 void RemoveLine(Text *text)
 {
-    RemoveChars(&text->buffer, FindLineStart(text, text->globalPosition), FindLineEnd(text, text->globalPosition));
+    if (text->selectionStart != -1)
+        RemoveSelection(text);
+    else
+    {
+        i32 start = FindLineStart(text, text->globalPosition);
+        i32 end = FindLineEnd(text, text->globalPosition);
+
+        RemoveChars(&text->buffer, start, end);
+        SetCursorPosition(text, text->globalPosition - (end - start + 1));
+    }
 }
 
 #define TAB_WIDTH 3
@@ -220,4 +236,131 @@ void MoveLineLeft(Text *text)
     }
 
     SetCursorPosition(text, MaxI32(text->globalPosition - charsRemoved, lineStart));
+}
+
+char whitespaceChars[] = {' ', '\n', ':', '.', '(', ')'};
+
+u32 IsWhitespace(char ch)
+{
+    for (i32 i = 0; i < ArrayLength(whitespaceChars); i++)
+    {
+        if (whitespaceChars[i] == ch)
+            return 1;
+    }
+
+    return 0;
+}
+void JumpWordForward(Text *text)
+{
+    i32 i = text->globalPosition;
+    while (i < text->buffer.size && !IsWhitespace(text->buffer.content[i]))
+        i++;
+
+    while (i < text->buffer.size && IsWhitespace(text->buffer.content[i]))
+        i++;
+
+    SetCursorPosition(text, i);
+}
+
+void JumpWordBackward(Text *text)
+{
+    i32 i = text->globalPosition == 0 ? 0 : text->globalPosition - 1;
+
+    while (i > 0 && IsWhitespace(text->buffer.content[i]))
+        i--;
+
+    while (i > 0 && !IsWhitespace(text->buffer.content[i - 1]))
+        i--;
+
+    SetCursorPosition(text, i);
+}
+
+void MoveToLineStart(Text *text)
+{
+    i32 lineStart = FindLineStart(text, text->globalPosition);
+    i32 formattedLineStart = lineStart;
+    while (text->buffer.content[formattedLineStart] == ' ')
+        formattedLineStart++;
+
+    if (text->globalPosition == formattedLineStart)
+        SetCursorPosition(text, lineStart);
+    else
+        SetCursorPosition(text, formattedLineStart);
+}
+
+void MoveToLineEnd(Text *text)
+{
+    i32 lineEnd = FindLineEnd(text, text->globalPosition);
+    SetCursorPosition(text, lineEnd);
+}
+
+typedef struct CursorPos
+{
+    i32 global;
+    i32 line;
+    i32 lineOffset;
+} CursorPos;
+
+CursorPos GetCursorPositionForGlobal(Text *text, i32 pos)
+{
+    CursorPos res = {0};
+    res.global = -1;
+    if (pos >= 0 && pos <= text->buffer.size)
+    {
+        res.global = pos;
+        res.line = 0;
+
+        i32 lineStartedAt = 0;
+        for (i32 i = 0; i < pos; i++)
+        {
+            if (text->buffer.content[i] == '\n')
+            {
+                res.line++;
+                lineStartedAt = i + 1;
+            }
+        }
+
+        res.lineOffset = pos - lineStartedAt;
+    }
+    return res;
+}
+i32 GetLineLength(Text *text, i32 line)
+{
+    i32 currentLine = 0;
+    i32 currentLineLength = 0;
+    for (i32 i = 0; i < text->buffer.size; i++)
+    {
+        if (text->buffer.content[i] == '\n')
+        {
+            if (currentLine == line)
+                return currentLineLength + 1;
+
+            currentLine++;
+            currentLineLength = 0;
+        }
+        else
+        {
+            currentLineLength++;
+        }
+    }
+    return currentLineLength;
+}
+
+void RemoveCharFromLeft(Text *text)
+{
+    if (text->selectionStart != -1)
+        RemoveSelection(text);
+    else if (text->globalPosition > 0)
+    {
+        RemoveCharAt(&text->buffer, text->globalPosition - 1);
+        SetCursorPosition(text, text->globalPosition - 1);
+    }
+}
+
+void RemoveCharFromRight(Text *text)
+{
+    if (text->selectionStart != -1)
+        RemoveSelection(text);
+    else if (text->globalPosition < text->buffer.size)
+        RemoveCharAt(&text->buffer, text->globalPosition);
 }

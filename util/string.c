@@ -177,3 +177,11 @@ u32 FindLastLineIndex(char *start, i32 len)
 
     return last - start;
 }
+
+inline char ToCharLower(char ch)
+{
+    if (ch >= 'A' && ch <= 'Z')
+        return ch + ('a' - 'A');
+
+    return ch;
+}

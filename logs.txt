@@ -1,0 +1,7 @@
+Monday
+  10:50 Came to place
+    10:55 Writing the plan
+    11:00 Working on local search. Moved code for navigation between search results and highlight them. 
+    12:00 Done
+
+

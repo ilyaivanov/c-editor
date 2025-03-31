@@ -54,23 +54,3 @@ void RunAndCaptureOutput(char *outBuffer, int32_t *len, BOOL isProd)
     CloseHandle(pi.hThread);
     // return exitCode;
 }
-
-void RunWithoutOutput()
-{
-    STARTUPINFO si = {sizeof(si)};
-    PROCESS_INFORMATION pi;
-
-    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-    // si.hStdOutput = g_hChildStd_OUT_Wr;
-    // si.hStdOutput = hWrite;   // Redirect stdout to pipe
-    // si.hStdError = hWrite;    // Redirect stderr to pipe
-    si.wShowWindow = SW_HIDE; // Prevent console window from appearing
-
-    if (CreateProcess(NULL, "cmd.exe /C lib.bat", NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
-    {
-        WaitForSingleObject(pi.hProcess, INFINITE);
-
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    }
-}

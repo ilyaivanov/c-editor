@@ -1,21 +1,38 @@
 Core features:
+   Selection
    Undo/redo
+   Cursor position history
    File navigation
    Buffer 
-   Selection
    Minimal Syntax highlight
 
 
 Cursor Movement
    HJKL - move cursor up and down
-   ZX - remove char from left and right
-   QR - move cursor start and end of the line
-   W B - jump words
+   Z X - remove char from left and right
+   Q R - move cursor start and end of the line
+   W B - jump words forward\back
+   Q R - move to start\end of the line
+   g ctl+g - move to start\end of the file
+
 
 Editing
    i, ctl+i - enter and exit insert mode 
    Enter - place a new line (usable in normal mode)
    O o - enter a new line above and below
    y - copy selected (line if nothing selected)
+   p - paste into cursor (if selected, stuff is replaced)
    d - delete selection (line if nothing selected)
    tab, shift+tab - move line 4 spaces right/left
+
+Sunday
+   Scroll
+
+Monday
+   Toggle comments
+   Collapse\tree-like navigation
+   Ctrl + JK - move down\up on the same nested level
+   Show red line at the bottom if file is not saved
+   Search
+   On enter preserve nestedness
+   Shift should not always select

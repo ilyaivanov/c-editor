@@ -3,4 +3,4 @@ build
 monitor.exe
 monitor.obj
 main.exe
-.\lib
+\lib

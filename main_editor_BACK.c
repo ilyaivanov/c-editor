@@ -677,15 +677,6 @@ void DrawScrollBar()
     }
 }
 
-f32 clamp(f32 val, f32 min, f32 max)
-{
-    if (val < min)
-        return min;
-    if (val > max)
-        return max;
-    return val;
-}
-
 f32 ClampOffset(f32 val)
 {
     f32 maxOffset = MaxF32(pageHeight - view.y, 0);

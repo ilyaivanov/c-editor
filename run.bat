@@ -18,7 +18,7 @@ set CommonCompilerOptions=/nologo /GR- /FC /GS- /Gs9999999 /Femain.exe
 
 set CompilerOptionsDev=/Zi /Od
 
-set CompilerOptionsProd=/O2 
+set CompilerOptionsProd=/O2
 
 set LinkerOptions=/nodefaultlib /subsystem:windows /STACK:0x100000,0x100000 /incremental:no
 set Libs=user32.lib kernel32.lib gdi32.lib opengl32.lib dwmapi.lib winmm.lib shell32.lib ole32.lib uuid.lib ucrt.lib

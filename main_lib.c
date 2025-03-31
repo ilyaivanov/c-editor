@@ -45,7 +45,8 @@ void PaintRect(MyBitmap *canvas, i32 x, i32 y, i32 width, i32 height, u32 color)
     {
         for (i32 i = x0; i < x1; i++)
         {
-            canvas->pixels[j * canvas->width + i] = color;
+            u32 g = (u32)(((f32)(j - y0) / (f32)(y1 - y0)) * 255);
+            canvas->pixels[j * canvas->width + i] = (g << 16) | (125 << 8) | (g << 0);
         }
     }
 }

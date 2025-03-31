@@ -2,6 +2,7 @@
 #include "common.c"
 #include "util\win32.c"
 #include "util\arena.c"
+#include "util\anim.c"
 #include "util\font.c"
 #include "util\string.c"
 #include "types.c"
@@ -9,6 +10,26 @@
 #include "main_lib.h"
 #include "buildDll.c"
 #include "text.c"
+#include "search.c"
+
+typedef struct ScreenView
+{
+    Rect rect;
+    u32 pageHeight;
+    // i32 scrollOffset;
+    Spring scrollOffset;
+} ScreenView;
+
+ScreenView leftTop;
+ScreenView codeLeftColumnRect;
+
+// should be one
+ScreenView *focusedView;
+Text *focusedText;
+
+f32 lineHeight = 1.2f;
+i32 padding = 12;
+f32 scrollbarWidth = 10;
 
 u32 isRunning = 1;
 u32 isFullscreen = 0;
@@ -18,8 +39,12 @@ Arena canvasArena;
 Arena fontArena;
 FontData font;
 HDC dc;
+
 Text leftBuffer;
 Text textBuffer;
+Text *currentBuffer;
+char *currentBufferPath;
+
 HMODULE libModule;
 
 f32 compilationMs;
@@ -29,17 +54,18 @@ u32 isProdBuild;
 
 Arena tempArena;
 
-char *leftBufferName = ".\\main_lib.c";
+char *leftBufferName = ".\\main_editor.c";
 char *textBufferName = ".\\actions.txt";
 
 typedef enum Mode
 {
     ModeNormal,
-    ModeInsert
+    ModeInsert,
+    ModeLocalSearch,
 } Mode;
 
 i32 isJustMovedToInsert = 0; // this is used to avoid first WM_CHAR event after entering insert mode
-Mode mode = ModeNormal;
+Mode mode = ModeLocalSearch;
 
 u8 isBuildOk;
 u8 buildBuffer[KB(20)];
@@ -59,15 +85,11 @@ typedef enum UiPart
     UiPartsCount
 } UiPart;
 
-u32 uiPartsShown = 0xffffff;
-u32 uiPartFocused = 0b1;
+UiPart uiPartFocused;
 
 typedef struct ColorScheme
 {
-    u32 bg;
-    u32 line;
-    u32 activeLine;
-    u32 font;
+    u32 bg, line, activeLine, font, scrollbar, selection;
 } ColorScheme;
 
 ColorScheme colors;
@@ -78,6 +100,8 @@ void InitColors()
     colors.font = 0xEEEEEE;
     colors.line = 0x2F2F2F;
     colors.activeLine = 0x51315C;
+    colors.scrollbar = 0x333333;
+    colors.selection = 0x224545;
 }
 
 void ClearToBg()
@@ -201,41 +225,160 @@ inline void DrawTextLine(Rect *rect, char *text, i32 x, i32 y, u32 color)
     DrawTextLineLen(rect, text, strlen(text), x, y, color);
 }
 
-void RenderTextInsideRect(const Rect *rect, const Text *text)
+void DrawScrollBar(ScreenView *view)
 {
-    f32 lineHeight = 1.2f;
+    if (view->rect.height < view->pageHeight)
+    {
+        f32 height = (f32)view->rect.height;
+        f32 pageHeight = (f32)view->pageHeight;
+        f32 scrollOffset = (f32)view->scrollOffset.current;
+
+        f32 scrollbarHeight = (height * height) / pageHeight;
+
+        f32 maxOffset = pageHeight - height;
+        f32 maxScrollY = height - scrollbarHeight;
+        f32 scrollY = lerp(0, maxScrollY, scrollOffset / maxOffset);
+
+        PaintRect(view->rect.x + view->rect.width - scrollbarWidth, view->rect.y + scrollY, scrollbarWidth, (i32)scrollbarHeight, colors.scrollbar);
+    }
+}
+
+void DrawLocalSearch(ScreenView *view)
+{
+    i32 searchPadding = 5;
+    i32 searchRectWidth = strlen(searchTerm) * font.charWidth + searchPadding * 2;
+    i32 searchRectX = view->rect.x + view->rect.width - searchRectWidth - padding;
+    if (focusedView->rect.height < focusedView->pageHeight)
+        searchRectX -= scrollbarWidth;
+
+    i32 searchRectY = view->rect.y + padding;
+    PaintRect(searchRectX, searchRectY, searchRectWidth, font.charHeight + searchPadding * 2, 0x224444);
+    DrawTextLine(&view->rect, searchTerm, searchRectX + searchPadding, searchRectY + searchPadding, 0xffffff);
+}
+
+f32 ClampOffset(f32 val)
+{
+    f32 maxOffset = MaxF32(focusedView->pageHeight - focusedView->rect.height, 0);
+    return clamp(val, 0, maxOffset);
+}
+
+void RenderTextInsideRect(ScreenView *view, const Text *text)
+{
+
     i32 lineHeightPx = RoundI32((f32)font.charHeight * lineHeight);
 
-    i32 padding = 12;
-    i32 x = rect->x + padding;
-    i32 y = rect->y + padding;
+    i32 x = view->rect.x + padding;
+    i32 y = view->rect.y + padding - view->scrollOffset.current;
 
-    // u32 cursorX = leftPadding + cursor.lineOffset * font.charWidth - 1;
-    // u32 cursorY = padding + cursor.line * lineHeightPx - offsetY - scrollOffset.current;
-    u32 cursorX = x + text->lineOffset * font.charWidth - 1;
-    u32 cursorY = y + text->line * lineHeightPx - 1;
+    if (text == currentBuffer)
+    {
+        u32 cursorX = x + text->lineOffset * font.charWidth - 1;
+        u32 cursorY = y + text->line * lineHeightPx - 1;
 
-    u32 currentLineBg = 0x202020;
-    u32 cursorColor = mode == ModeNormal ? 0x22ff22 : 0xff2222;
-    PaintRect(rect->x, rect->y + cursorY, rect->width, lineHeightPx, currentLineBg);
-    PaintRect(cursorX, cursorY, 2, lineHeightPx, cursorColor);
+        u32 currentLineBg = 0x202020;
+        u32 cursorColor = mode == ModeNormal ? 0x22ff22 : 0xff2222;
+        PaintRect(view->rect.x, view->rect.y + cursorY, view->rect.width, lineHeightPx, currentLineBg);
+        PaintRect(cursorX, cursorY, 2, lineHeightPx, cursorColor);
+
+        u32 selectionBgColor = colors.selection;
+        if (text->selectionStart != -1)
+        {
+            u32 selectionLeft = MinI32(text->selectionStart, text->globalPosition);
+            u32 selectionRight = MaxI32(text->selectionStart, text->globalPosition);
+
+            CursorPos startPos = GetCursorPositionForGlobal(currentBuffer, selectionLeft);
+            CursorPos endPos = GetCursorPositionForGlobal(currentBuffer, selectionRight);
+
+            i32 len = GetLineLength(currentBuffer, startPos.line);
+            i32 maxLen = len - startPos.lineOffset;
+            i32 firstLineLen = MinI32(selectionRight - selectionLeft, maxLen);
+
+            PaintRect(x + startPos.lineOffset * font.charWidth,
+                      y + startPos.line * lineHeightPx,
+                      firstLineLen * font.charWidth,
+                      lineHeightPx,
+                      selectionBgColor);
+
+            if (startPos.line != endPos.line)
+            {
+                for (i32 l = startPos.line + 1; l < endPos.line; l++)
+                {
+                    PaintRect(x,
+                              y + l * lineHeightPx,
+                              GetLineLength(currentBuffer, l) * font.charWidth,
+                              lineHeightPx,
+                              selectionBgColor);
+                }
+
+                PaintRect(x,
+                          y + endPos.line * lineHeightPx,
+                          endPos.lineOffset * font.charWidth,
+                          lineHeightPx,
+                          selectionBgColor);
+            }
+        }
+    }
+
+    // highlight search results
+    i32 currentSearchEntryIndex = 0;
+    EntryFound *found = NULL;
+
+    for (i32 i = 0; i < text->buffer.size; i++)
+    {
+        if (currentSearchEntryIndex < entriesCount)
+            found = &entriesAt[currentSearchEntryIndex];
+        else
+            found = NULL;
+
+        if (mode == ModeLocalSearch && found && i >= found->at && i < found->at + found->len)
+        {
+            if (currentSearchEntryIndex == currentEntry)
+                PaintRect(x, y, font.charWidth, font.charHeight, 0x448844);
+            else
+                PaintRect(x, y, font.charWidth, font.charHeight, 0x444444);
+        }
+
+        char ch = text->buffer.content[i];
+        if (ch == '\n')
+        {
+            x = view->rect.x + padding;
+            y += lineHeightPx;
+        }
+        else
+        {
+            x += font.charWidth;
+        }
+
+        if (found && i >= found->at + found->len)
+        {
+            currentSearchEntryIndex++;
+        }
+    }
+
+    x = view->rect.x + padding;
+    y = view->rect.y + padding - view->scrollOffset.current;
+
     for (i32 i = 0; i < text->buffer.size; i++)
     {
         char ch = text->buffer.content[i];
         if (ch == '\n')
         {
-            x = rect->x + padding;
+            x = view->rect.x + padding;
             y += lineHeightPx;
         }
         else
         {
             if (ch >= ' ' && ch < MAX_CHAR_CODE)
-                CopyBitmapRectTo(rect, &font.textures[ch], x, y, colors.font);
+                CopyBitmapRectTo(&view->rect, &font.textures[ch], x, y, colors.font);
             else
                 PaintRect(x, y, font.charWidth, font.charHeight, 0xff2222);
             x += font.charWidth;
         }
     }
+
+    // I subtract scrollOffset initially, I need to think what is the better way to solve this
+    view->pageHeight = y + lineHeightPx + padding + view->scrollOffset.current;
+    DrawScrollBar(view);
 }
 
 typedef enum FileInfoType
@@ -347,52 +490,64 @@ void Draw()
     f32 topScale = 1.0f / 2.0f;
     f32 middleScale = 1 - (topScale);
 
-    Rect leftTop = {0, 0, leftPanelWidth, view.y * topScale};
-    Rect leftMiddle = {0, leftTop.y + leftTop.height, leftPanelWidth, view.y * middleScale};
+    leftTop.rect.width = leftPanelWidth;
+    leftTop.rect.height = view.y * topScale;
+
+    Rect leftMiddle = {0, leftTop.rect.y + leftTop.rect.height, leftPanelWidth, view.y * middleScale};
 
     u32 workAreaWidth = screen.width - leftColumn.width;
 
-    Rect codeLeftColumnRect = {leftPanelWidth, 0, workAreaWidth * leftCodeScale, view.y};
-    Rect codeRightColumnRect = {codeLeftColumnRect.x + codeLeftColumnRect.width, 0, workAreaWidth * rightCodeScale, view.y};
+    codeLeftColumnRect.rect.x = leftPanelWidth;
+    codeLeftColumnRect.rect.width = workAreaWidth * leftCodeScale;
+    codeLeftColumnRect.rect.height = screen.height;
+    Rect codeRightColumnRect = {codeLeftColumnRect.rect.x + codeLeftColumnRect.rect.width, 0, workAreaWidth * rightCodeScale, view.y};
     Rect runColumnRect = {codeRightColumnRect.x + codeRightColumnRect.width, 0, workAreaWidth * runSplitScale, view.y};
 
     Rect *rectFocused = NULL;
-    if (uiPartFocused & (1 << Tasks))
-        rectFocused = &leftTop;
-    if (uiPartFocused & (1 << Explorer))
+    if (uiPartFocused == Tasks)
+        rectFocused = &leftTop.rect;
+    if (uiPartFocused == Explorer)
         rectFocused = &leftMiddle;
-    // if (uiPartFocused & (1 << Symbols))
-    //     rectFocused = &leftBottom;
-    if (uiPartFocused & (1 << LeftCode))
-        rectFocused = &codeLeftColumnRect;
-    // if (uiPartFocused & (1 << RightCode))
-    //     rectFocused = &codeRightColumnRect;
-    if (uiPartFocused & (1 << Execution))
+    if (uiPartFocused == LeftCode)
+        rectFocused = &codeLeftColumnRect.rect;
+    if (uiPartFocused == Execution)
         rectFocused = &runColumnRect;
+
+    if (uiPartFocused == Tasks)
+    {
+        focusedView = &leftTop;
+        focusedText = &textBuffer;
+    }
+    else if (uiPartFocused == LeftCode)
+    {
+        focusedView = &codeLeftColumnRect;
+        focusedText = &leftBuffer;
+    }
+    else
+    {
+        focusedView = NULL;
+        focusedText = NULL;
+    }
 
     if (rectFocused)
         OutlineRect(*rectFocused, colors.activeLine);
 
     DrawRightBoundary(leftColumn);
     DrawBottomBoundary(leftMiddle);
-    DrawBottomBoundary(leftTop);
+    DrawBottomBoundary(leftTop.rect);
 
-    DrawRightBoundary(codeLeftColumnRect);
+    DrawRightBoundary(codeLeftColumnRect.rect);
 
     RenderFileExplorer(&leftMiddle);
-    // RenderTasksExplorer(&leftTop);
 
-    // RenderStats(&leftBottom);
-    // RenderSymbols(&leftBottom);
+    RenderTextInsideRect(&leftTop, &textBuffer);
+    UpdateSpring(&leftTop.scrollOffset, 1.0f / 60.0f);
 
     RenderTextInsideRect(&codeLeftColumnRect, &leftBuffer);
-    RenderTextInsideRect(&leftTop, &textBuffer);
+    UpdateSpring(&codeLeftColumnRect.scrollOffset, 1.0f / 60.0f);
 
-    // if (rightCodeScale != 0)
-    // {
-    //     DrawRightBoundary(codeRightColumnRect);
-    //     RenderTextInsideRect(&codeRightColumnRect, &rightBuffer);
-    // }
+    if (mode == ModeLocalSearch)
+        DrawLocalSearch(focusedView);
 
     if (isBuildOk && render)
     {
@@ -442,6 +597,33 @@ void Draw()
     StretchDIBits(dc, 0, 0, view.x, view.y, 0, 0, view.x, view.y, canvas.pixels, &bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
 }
 
+void ScrollIntoView()
+{
+    if (focusedView && focusedText && focusedView->rect.height < focusedView->pageHeight)
+    {
+        i32 itemsToLookAhead = 3;
+
+        i32 lineHeightPx = RoundI32((f32)font.charHeight * lineHeight);
+
+        i32 cursorY =
+            focusedText->line * lineHeightPx + padding;
+
+        i32 spaceToLookAhead = lineHeightPx * itemsToLookAhead;
+
+        if (
+            cursorY + spaceToLookAhead - focusedView->rect.height >
+            focusedView->scrollOffset.target)
+        {
+            focusedView->scrollOffset.target = ClampOffset(cursorY - focusedView->rect.height + spaceToLookAhead);
+        }
+        else if (cursorY - spaceToLookAhead < focusedView->scrollOffset.target)
+        {
+            i32 targetOffset = cursorY - spaceToLookAhead;
+            focusedView->scrollOffset.target = ClampOffset(targetOffset);
+        }
+    }
+}
+
 void OnResize(HWND window, LPARAM lParam)
 {
     if (!dc)
@@ -473,12 +655,6 @@ void OnResize(HWND window, LPARAM lParam)
     canvas.width = view.x;
     canvas.height = view.y;
     canvas.bytesPerPixel = 4;
-    Draw();
-}
-
-inline BOOL IsKeyPressed(u32 code)
-{
-    return (GetKeyState(code) >> 15) & 1;
 }
 
 inline void EnterInsertMode()
@@ -487,22 +663,63 @@ inline void EnterInsertMode()
     isJustMovedToInsert = 1;
 }
 
-LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+void SetFocusedPart(UiPart part)
 {
-    Text *currentBuffer;
-    u8 *currentBufferPath;
-
-    if (uiPartFocused & (1 << LeftCode))
+    uiPartFocused = part;
+    if (uiPartFocused == LeftCode)
     {
         currentBuffer = &leftBuffer;
         currentBufferPath = leftBufferName;
     }
-    else if (uiPartFocused & (1 << Tasks))
+    else if (uiPartFocused == Tasks)
     {
         currentBuffer = &textBuffer;
         currentBufferPath = textBufferName;
     }
+}
 
+void Copy(HWND window, Text *text)
+{
+    i32 start;
+    i32 end;
+    if (text->selectionStart == -1)
+    {
+        start = FindLineStart(text, text->globalPosition);
+        end = FindLineEnd(text, text->globalPosition) + 1;
+    }
+    else
+    {
+        start = MinI32(text->selectionStart, text->globalPosition);
+        end = MaxI32(text->selectionStart, text->globalPosition);
+    }
+    SetClipboard(window, &text->buffer.content[start], end - start);
+}
+
+void PasteFromClipboard(HWND window, Text *text)
+{
+    if (text->selectionStart != -1)
+        RemoveSelection(text);
+
+    OpenClipboard(window);
+    HANDLE hClipboardData = GetClipboardData(CF_TEXT);
+    char *pchData = (char *)GlobalLock(hClipboardData);
+    if (pchData)
+    {
+        i32 len = strlen(pchData);
+        InsertChars(&text->buffer, pchData, len, text->globalPosition);
+        SetCursorPosition(text, text->globalPosition + len);
+        GlobalUnlock(hClipboardData);
+    }
+    else
+    {
+        // OutputDebugStringA("Failed to capture clipboard\n");
+    }
+    CloseClipboard();
+    // ScrollIntoView();
+}
+
+LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
     switch (message)
     {
 
@@ -513,28 +730,65 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
 
+    case WM_MOUSEWHEEL:
+
+        if (focusedView && focusedView->rect.height < focusedView->pageHeight)
+        {
+            focusedView->scrollOffset.target = ClampOffset(focusedView->scrollOffset.target - GET_WHEEL_DELTA_WPARAM(wParam));
+        }
+        break;
+
     case WM_SYSKEYDOWN:
     case WM_KEYDOWN:
 
-        if (uiPartFocused & (1 << Execution))
+        if (uiPartFocused == Execution)
         {
             if (IsKeyPressed(VK_CONTROL) && (wParam >= '1' && wParam < ('1' + UiPartsCount)))
-                uiPartFocused = 1 << (wParam - '1');
+                SetFocusedPart(wParam - '1');
             else if (onEventCb)
                 onEventCb(window, message, wParam, lParam);
         }
         else if (IsKeyPressed(VK_CONTROL) && (wParam >= '1' && wParam < ('1' + UiPartsCount)))
-            uiPartFocused = 1 << (wParam - '1');
+            SetFocusedPart(wParam - '1');
         else if (wParam == VK_F11)
         {
             isFullscreen = !isFullscreen;
             SetFullscreen(window, isFullscreen);
         }
+        else if (wParam == VK_F4 && IsKeyPressed(VK_MENU))
+        {
+            PostQuitMessage(0);
+            isRunning = 0;
+        }
         else if (currentBuffer)
         {
-            if (mode == ModeNormal)
+            if (mode == ModeLocalSearch)
             {
-                if (wParam == 'R')
+                if (wParam == VK_BACK && searchLen > 0)
+                    searchTerm[--searchLen] = '\0';
+
+                else if (IsKeyPressed(VK_MENU) && wParam == 'J')
+                {
+                    if (currentEntry < entriesCount - 1)
+                    {
+                        currentEntry++;
+                        SetCursorPosition(currentBuffer, entriesAt[currentEntry].at);
+                        ScrollIntoView();
+                    }
+                }
+                else if (IsKeyPressed(VK_MENU) && wParam == 'K')
+                {
+                    if (currentEntry > 0)
+                    {
+                        currentEntry--;
+                        SetCursorPosition(currentBuffer, entriesAt[currentEntry].at);
+                        ScrollIntoView();
+                    }
+                }
+            }
+            else if (mode == ModeNormal)
+            {
+                if (wParam == 'V')
                 {
                     i64 start = GetPerfCounter();
                     if (libModule)
@@ -579,12 +833,16 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                         SwapLineDown(currentBuffer, &tempArena);
                     else
                         GoDown(currentBuffer);
+                    ScrollIntoView();
                 }
                 if (wParam == 'K')
+                {
                     if (IsKeyPressed(VK_MENU))
                         SwapLineUp(currentBuffer, &tempArena);
                     else
                         GoUp(currentBuffer);
+                    ScrollIntoView();
+                }
                 if (wParam == 'I')
                     EnterInsertMode();
 
@@ -602,6 +860,21 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 {
                     RemoveLine(currentBuffer);
                 }
+
+                if (wParam == 'G')
+                {
+                    if (IsKeyPressed(VK_CONTROL))
+                        SetCursorPosition(currentBuffer, currentBuffer->buffer.size);
+                    else
+                        SetCursorPosition(currentBuffer, 0);
+
+                    ScrollIntoView();
+                }
+
+                if (wParam == 'Y')
+                    Copy(window, currentBuffer);
+                if (wParam == 'P')
+                    PasteFromClipboard(window, currentBuffer);
 
                 if (wParam == 'S')
                     WriteMyFile(currentBufferPath, currentBuffer->buffer.content, currentBuffer->buffer.size);
@@ -624,6 +897,18 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                     MoveLineLeft(currentBuffer);
                 else if (wParam == VK_TAB)
                     MoveLineRight(currentBuffer);
+
+                if (wParam == 'W')
+                    JumpWordForward(currentBuffer);
+
+                if (wParam == 'B')
+                    JumpWordBackward(currentBuffer);
+
+                if (wParam == 'Q')
+                    MoveToLineStart(currentBuffer);
+
+                if (wParam == 'R')
+                    MoveToLineEnd(currentBuffer);
             }
             else
             {
@@ -644,7 +929,17 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         isRunning = 0;
         break;
     case WM_CHAR:
-        if (mode == ModeInsert && currentBuffer)
+        if (mode == ModeLocalSearch)
+        {
+            if (wParam >= ' ' && wParam < MAX_CHAR_CODE)
+                searchTerm[searchLen++] = wParam;
+
+            FindEntries(currentBuffer);
+            SetCursorPosition(currentBuffer, entriesAt[currentEntry].at);
+            ScrollIntoView();
+            // CenterOnRowIfNotVisible();
+        }
+        else if (mode == ModeInsert && currentBuffer)
         {
             if (isJustMovedToInsert)
                 isJustMovedToInsert = 0;
@@ -675,14 +970,18 @@ void WinMainCRTStartup()
 
     InitColors();
     InitFonts();
+    InitAnimations();
 
     tempArena = CreateArena(KB(512));
     leftBuffer.buffer = ReadFileIntoDoubledSizedBuffer(leftBufferName);
-    SetCursorPosition(&leftBuffer, 20);
-
     textBuffer.buffer = ReadFileIntoDoubledSizedBuffer(textBufferName);
 
     HWND window = OpenWindow(OnEvent, colors.bg, "Editor");
+
+    SetFocusedPart(LeftCode);
+
+    leftBuffer.selectionStart = -1;
+    textBuffer.selectionStart = -1;
 
     while (isRunning)
     {
