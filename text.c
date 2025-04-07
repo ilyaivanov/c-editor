@@ -3,6 +3,7 @@
 #include "types.c"
 #include "util\string.c"
 #include "util\arena.c"
+// #include "undoRedo.c"
 
 typedef struct Text
 {
@@ -14,6 +15,10 @@ typedef struct Text
     // these are cached values, such that I don't need to find them on each frame
     u32 line;
     u32 lineOffset;
+
+    // Change changes[];
+    // i32 currentChange;
+    // i32 totalChanges;
 } Text;
 
 void UpdateCursorOffset(Text *text)
@@ -208,10 +213,20 @@ void RemoveLine(Text *text)
     else
     {
         i32 start = FindLineStart(text, text->globalPosition);
-        i32 end = FindLineEnd(text, text->globalPosition);
+        i32 end = MinI32(FindLineEnd(text, text->globalPosition), text->buffer.size);
 
-        RemoveChars(&text->buffer, start, end);
-        SetCursorPosition(text, text->globalPosition - (end - start + 1));
+        if (start == 0 && end == text->buffer.size)
+        {
+            text->buffer.size = 0;
+            PlaceLineEnd(&text->buffer);
+            SetCursorPosition(text, 0);
+        }
+        else
+        {
+
+            RemoveChars(&text->buffer, start, end);
+            SetCursorPosition(text, MinI32(text->globalPosition, text->buffer.size));
+        }
     }
 }
 
@@ -364,3 +379,15 @@ void RemoveCharFromRight(Text *text)
     else if (text->globalPosition < text->buffer.size)
         RemoveCharAt(&text->buffer, text->globalPosition);
 }
+
+// Enter - place a new line (usable in normal mode)
+// O o - enter a new line above and below
+// p - paste into cursor (if selected, stuff is replaced)
+// d - delete selection (line if nothing selected)
+// tab, shift+tab - move line 4 spaces right/left
+
+// State I need to capture on each update
+//    textRemoved
+//    textAdded
+//    cursorPositionBefore
+//    cursorPositionAfter

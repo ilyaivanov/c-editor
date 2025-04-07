@@ -16,16 +16,28 @@ typedef struct ScreenView
 {
     Rect rect;
     u32 pageHeight;
-    // i32 scrollOffset;
     Spring scrollOffset;
+
+    i32 isSaved;
+    char *path;
+    Text textBuffer;
+
+    Arena changesAreana;
+    i32 currentChange;
+    i32 totalChanges;
 } ScreenView;
 
-ScreenView leftTop;
-ScreenView codeLeftColumnRect;
+#define VIEWS_COUNT 4
+ScreenView sidebarTop;
+ScreenView sidebarMiddle;
+ScreenView sidebarBottom;
+ScreenView codeView;
 
 // should be one
 ScreenView *focusedView;
-Text *focusedText;
+
+// this is used to figure out where to load text from the File Explorer
+ScreenView *lastSelectedView;
 
 f32 lineHeight = 1.2f;
 i32 padding = 12;
@@ -40,11 +52,6 @@ Arena fontArena;
 FontData font;
 HDC dc;
 
-Text leftBuffer;
-Text textBuffer;
-Text *currentBuffer;
-char *currentBufferPath;
-
 HMODULE libModule;
 
 f32 compilationMs;
@@ -54,8 +61,23 @@ u32 isProdBuild;
 
 Arena tempArena;
 
-char *leftBufferName = ".\\main_editor.c";
-char *textBufferName = ".\\actions.txt";
+typedef struct FileInfo
+{
+    char *name;
+} FileInfo;
+
+FileInfo files[] =
+    {
+        "main_editor.c",
+        "sample.txt",
+        "logs.txt",
+        "actions.txt",
+        "search.c",
+        "types.c",
+        "main_lib.c",
+};
+
+i32 selectedFile = 1;
 
 typedef enum Mode
 {
@@ -65,7 +87,7 @@ typedef enum Mode
 } Mode;
 
 i32 isJustMovedToInsert = 0; // this is used to avoid first WM_CHAR event after entering insert mode
-Mode mode = ModeLocalSearch;
+Mode mode = ModeNormal;
 
 u8 isBuildOk;
 u8 buildBuffer[KB(20)];
@@ -74,22 +96,19 @@ i32 buildBufferLen;
 RenderApp *render;
 OnLibEvent *onEventCb;
 
-typedef enum UiPart
-{
-    Tasks = 0,
-    Explorer,
-    // Symbols,
-    LeftCode,
-    // RightCode,
-    Execution,
-    UiPartsCount
-} UiPart;
+// typedef enum UiPart
+// {
+//     Tasks = 0,
+//     FileExplorerPart,
+//     LeftCode,
+//     UiPartsCount
+// } UiPart;
 
-UiPart uiPartFocused;
+// UiPart uiPartFocused;
 
 typedef struct ColorScheme
 {
-    u32 bg, line, activeLine, font, scrollbar, selection;
+    u32 bg, line, activeLine, lastSelectedOutline, font, scrollbar, selection, selectedItem;
 } ColorScheme;
 
 ColorScheme colors;
@@ -99,9 +118,11 @@ void InitColors()
     colors.bg = 0x080808;
     colors.font = 0xEEEEEE;
     colors.line = 0x2F2F2F;
-    colors.activeLine = 0x51315C;
+    colors.activeLine = 0x81315C;
+    colors.lastSelectedOutline = 0x514122;
     colors.scrollbar = 0x333333;
     colors.selection = 0x224545;
+    colors.selectedItem = 0x333333;
 }
 
 void ClearToBg()
@@ -200,6 +221,115 @@ inline void CopyBitmapRectTo(const Rect *rect, MyBitmap *sourceT, u32 offsetX, i
     }
 }
 
+//
+// Undo Redo
+//
+
+typedef enum ModificationType
+{
+    ModificationInsert,
+    ModificationRemove,
+} ModificationType;
+typedef struct TextRange
+{
+    ModificationType type;
+    i32 start;
+    i32 len;
+} TextRange;
+
+typedef struct Change
+{
+    i32 size;
+    TextRange textModified;
+    // i32 cursorPositionBefore;
+    // i32 cursorPositionAfter;
+    u8 chars[];
+} Change;
+
+// Arena changesArena;
+
+Change *FindChangeAtIndex(i32 index)
+{
+    i32 current = 0;
+    Change *change = (Change *)focusedView->changesAreana.start;
+    while (current < index)
+    {
+        change += change->size;
+        current++;
+    }
+
+    return change;
+}
+
+void UndoChange()
+{
+    if (focusedView->currentChange > 0)
+    {
+        Change *changeToUndo = FindChangeAtIndex(focusedView->currentChange - 1);
+        Text *text = &focusedView->textBuffer;
+        i32 start = changeToUndo->textModified.start;
+        i32 len = changeToUndo->textModified.len;
+        i32 end = start + changeToUndo->textModified.len - 1;
+
+        if (changeToUndo->textModified.type == ModificationInsert)
+            RemoveChars(&text->buffer, start, end);
+        else
+            InsertChars(&text->buffer, changeToUndo->chars, changeToUndo->textModified.len, start);
+
+        SetCursorPosition(text, start);
+        focusedView->currentChange--;
+    }
+}
+void RedoChange()
+{
+    if (focusedView->currentChange < focusedView->totalChanges)
+    {
+        Change *changeToUndo = FindChangeAtIndex(focusedView->currentChange);
+        Text *text = &focusedView->textBuffer;
+        i32 start = changeToUndo->textModified.start;
+        i32 len = changeToUndo->textModified.len;
+        i32 end = start + changeToUndo->textModified.len - 1;
+
+        if (changeToUndo->textModified.type == ModificationInsert)
+            InsertChars(&text->buffer, changeToUndo->chars, len, start);
+        else
+            RemoveChars(&text->buffer, start, end);
+
+        SetCursorPosition(text, start);
+        focusedView->currentChange++;
+    }
+}
+
+void AddChangeOfText(char *textModified, i32 at, ModificationType type)
+{
+    Change *change = FindChangeAtIndex(focusedView->currentChange);
+    change->size = sizeof(Change) + strlen(textModified);
+    change->textModified.type = type;
+    change->textModified.start = at;
+    change->textModified.len = strlen(textModified);
+
+    memmove(change->chars, textModified, strlen(textModified));
+
+    focusedView->currentChange += 1;
+    focusedView->totalChanges = focusedView->currentChange;
+    focusedView->changesAreana.bytesAllocated += change->size;
+}
+
+void InitChanges()
+{
+    AddChangeOfText("one\n", 0, ModificationInsert);
+    AddChangeOfText("two\n", 4, ModificationInsert);
+    AddChangeOfText("two\n", 4, ModificationRemove);
+    AddChangeOfText("two\n", 4, ModificationInsert);
+    AddChangeOfText("three", 8, ModificationInsert);
+}
+
+void BeginChange() {}
+void EndChange() {}
+//
+//
+//
+
 inline void InitFonts()
 {
     fontArena = CreateArena(MB(2));
@@ -262,7 +392,7 @@ f32 ClampOffset(f32 val)
     return clamp(val, 0, maxOffset);
 }
 
-void RenderTextInsideRect(ScreenView *view, const Text *text)
+void RenderTextInsideRect(ScreenView *view)
 {
 
     i32 lineHeightPx = RoundI32((f32)font.charHeight * lineHeight);
@@ -270,14 +400,15 @@ void RenderTextInsideRect(ScreenView *view, const Text *text)
     i32 x = view->rect.x + padding;
     i32 y = view->rect.y + padding - view->scrollOffset.current;
 
-    if (text == currentBuffer)
+    Text *text = &view->textBuffer;
+    if (focusedView == view)
     {
         u32 cursorX = x + text->lineOffset * font.charWidth - 1;
         u32 cursorY = y + text->line * lineHeightPx - 1;
 
         u32 currentLineBg = 0x202020;
         u32 cursorColor = mode == ModeNormal ? 0x22ff22 : 0xff2222;
-        PaintRect(view->rect.x, view->rect.y + cursorY, view->rect.width, lineHeightPx, currentLineBg);
+        PaintRect(view->rect.x, cursorY, view->rect.width, lineHeightPx, currentLineBg);
         PaintRect(cursorX, cursorY, 2, lineHeightPx, cursorColor);
 
         u32 selectionBgColor = colors.selection;
@@ -286,10 +417,10 @@ void RenderTextInsideRect(ScreenView *view, const Text *text)
             u32 selectionLeft = MinI32(text->selectionStart, text->globalPosition);
             u32 selectionRight = MaxI32(text->selectionStart, text->globalPosition);
 
-            CursorPos startPos = GetCursorPositionForGlobal(currentBuffer, selectionLeft);
-            CursorPos endPos = GetCursorPositionForGlobal(currentBuffer, selectionRight);
+            CursorPos startPos = GetCursorPositionForGlobal(text, selectionLeft);
+            CursorPos endPos = GetCursorPositionForGlobal(text, selectionRight);
 
-            i32 len = GetLineLength(currentBuffer, startPos.line);
+            i32 len = GetLineLength(text, startPos.line);
             i32 maxLen = len - startPos.lineOffset;
             i32 firstLineLen = MinI32(selectionRight - selectionLeft, maxLen);
 
@@ -305,7 +436,7 @@ void RenderTextInsideRect(ScreenView *view, const Text *text)
                 {
                     PaintRect(x,
                               y + l * lineHeightPx,
-                              GetLineLength(currentBuffer, l) * font.charWidth,
+                              GetLineLength(text, l) * font.charWidth,
                               lineHeightPx,
                               selectionBgColor);
                 }
@@ -320,38 +451,41 @@ void RenderTextInsideRect(ScreenView *view, const Text *text)
     }
 
     // highlight search results
-    i32 currentSearchEntryIndex = 0;
-    EntryFound *found = NULL;
-
-    for (i32 i = 0; i < text->buffer.size; i++)
+    if (focusedView == view && mode == ModeLocalSearch)
     {
-        if (currentSearchEntryIndex < entriesCount)
-            found = &entriesAt[currentSearchEntryIndex];
-        else
-            found = NULL;
+        i32 currentSearchEntryIndex = 0;
+        EntryFound *found = NULL;
 
-        if (mode == ModeLocalSearch && found && i >= found->at && i < found->at + found->len)
+        for (i32 i = 0; i < text->buffer.size; i++)
         {
-            if (currentSearchEntryIndex == currentEntry)
-                PaintRect(x, y, font.charWidth, font.charHeight, 0x448844);
+            if (currentSearchEntryIndex < entriesCount)
+                found = &entriesAt[currentSearchEntryIndex];
             else
-                PaintRect(x, y, font.charWidth, font.charHeight, 0x444444);
-        }
+                found = NULL;
 
-        char ch = text->buffer.content[i];
-        if (ch == '\n')
-        {
-            x = view->rect.x + padding;
-            y += lineHeightPx;
-        }
-        else
-        {
-            x += font.charWidth;
-        }
+            if (mode == ModeLocalSearch && found && i >= found->at && i < found->at + found->len)
+            {
+                if (currentSearchEntryIndex == currentEntry)
+                    PaintRect(x, y, font.charWidth, font.charHeight, 0x448844);
+                else
+                    PaintRect(x, y, font.charWidth, font.charHeight, 0x444444);
+            }
 
-        if (found && i >= found->at + found->len)
-        {
-            currentSearchEntryIndex++;
+            char ch = text->buffer.content[i];
+            if (ch == '\n')
+            {
+                x = view->rect.x + padding;
+                y += lineHeightPx;
+            }
+            else
+            {
+                x += font.charWidth;
+            }
+
+            if (found && i >= found->at + found->len)
+            {
+                currentSearchEntryIndex++;
+            }
         }
     }
 
@@ -377,38 +511,17 @@ void RenderTextInsideRect(ScreenView *view, const Text *text)
     }
 
     // I subtract scrollOffset initially, I need to think what is the better way to solve this
-    view->pageHeight = y + lineHeightPx + padding + view->scrollOffset.current;
+    view->pageHeight = y + lineHeightPx + padding + view->scrollOffset.current - view->rect.y;
     DrawScrollBar(view);
 }
 
-typedef enum FileInfoType
+void RenderFileExplorer(ScreenView *view)
 {
-    File,
-    Folder
-} FileInfoType;
-
-typedef struct FileInfo
-{
-    char *name;
-    FileInfoType type;
-} FileInfo;
-
-void RenderFileExplorer(Rect *rect)
-{
-    // clang-format off
-    FileInfo files[255] = 
-    {
-        "foo.c",         File,
-        "main_editor.c", File,
-        "types.c",       File,
-        "main_lib.c",    File,
-    };
-    // clang-format on
-
+    Rect *rect = &view->rect;
     i32 x = rect->x + 25;
     i32 y = rect->y + 10 + font.charHeight / 2;
 
-    i32 squareSize = 10;
+    i32 squareSize = 6;
 
     u32 squareToText = 10;
 
@@ -421,12 +534,40 @@ void RenderFileExplorer(Rect *rect)
         if (file.name == NULL)
             break;
 
+        if (focusedView == view && i == selectedFile)
+        {
+            PaintRect(rect->x, y - lineHeightPx / 2, rect->width, lineHeightPx, colors.selectedItem);
+        }
         PaintSquareAtCenter(x, y, squareSize, 0x888888);
 
         DrawTextLineLen(rect, file.name, strlen(file.name), x + squareSize / 2 + squareToText, y - font.charHeight / 2 - 1, colors.font);
 
         y += lineHeightPx;
     }
+
+    i32 padding = 5;
+    u32 statusHeight = lineHeightPx * 2;
+    PaintRect(rect->x, rect->y + rect->height - statusHeight, rect->width, statusHeight, 0x222222);
+
+    Arena *arena = &lastSelectedView->changesAreana;
+    u8 status[500] = {0};
+    i32 pos = 0;
+    pos += AppendStr("Changes: ", status + pos);
+    pos += AppendI32(focusedView->currentChange, status + pos);
+    pos += AppendStr(" of ", status + pos);
+    pos += AppendI32(focusedView->totalChanges, status + pos);
+    DrawTextLine(rect, status, rect->x + padding, rect->y + rect->height - statusHeight + padding, 0xffffff);
+
+    pos = 0;
+    memset(status, 0, 500);
+
+    pos += AppendStr("Change arena: ", status + pos);
+    pos += AppendI32(arena->bytesAllocated, status + pos);
+    pos += AppendStr("b of ", status + pos);
+    pos += AppendI32(arena->size, status + pos);
+    pos += AppendStr("b", status + pos);
+
+    DrawTextLine(rect, status, rect->x + padding, rect->y + rect->height - statusHeight + padding + lineHeightPx, 0xffffff);
 }
 
 void RenderStats(Rect *rect)
@@ -474,6 +615,18 @@ void RenderBuildResult(Rect *rect)
     }
 }
 
+void RenderModifiedLabel(ScreenView *view)
+{
+    Rect *r = &view->rect;
+    char *label = "Modified";
+    i32 labelPadding = 4;
+    i32 width = font.charWidth * strlen(label) + labelPadding * 2;
+    i32 height = font.charHeight + labelPadding * 2;
+    i32 x = r->x + r->width - width;
+    i32 y = r->y + r->height - height;
+    PaintRect(x, y, width, height, 0x222222);
+    DrawTextLine(r, label, x + labelPadding, y + labelPadding, 0xcccccc);
+}
 void Draw()
 {
     ClearToBg();
@@ -481,132 +634,128 @@ void Draw()
     Rect screen = {0, 0, view.x, view.y};
 
     u32 leftPanelWidth = 650;
-    f32 leftCodeScale = 1.0f / 2.0f;
-    f32 rightCodeScale = 0;
-    f32 runSplitScale = 1 - (leftCodeScale + rightCodeScale);
-
     Rect leftColumn = {0, 0, leftPanelWidth, view.y};
 
-    f32 topScale = 1.0f / 2.0f;
-    f32 middleScale = 1 - (topScale);
+    // Left sibeadar
+    f32 topHeight = 400;
+    f32 middleHeight = (screen.height - topHeight) * 0.5f;
+    f32 bottomHeight = middleHeight;
 
-    leftTop.rect.width = leftPanelWidth;
-    leftTop.rect.height = view.y * topScale;
+    sidebarTop.rect.width = leftPanelWidth;
+    sidebarTop.rect.height = topHeight;
 
-    Rect leftMiddle = {0, leftTop.rect.y + leftTop.rect.height, leftPanelWidth, view.y * middleScale};
+    sidebarMiddle.rect.y = topHeight;
+    sidebarMiddle.rect.width = leftPanelWidth;
+    sidebarMiddle.rect.height = middleHeight;
+
+    sidebarBottom.rect.y = sidebarMiddle.rect.y + sidebarMiddle.rect.height;
+    sidebarBottom.rect.width = leftPanelWidth;
+    sidebarBottom.rect.height = middleHeight;
 
     u32 workAreaWidth = screen.width - leftColumn.width;
 
-    codeLeftColumnRect.rect.x = leftPanelWidth;
-    codeLeftColumnRect.rect.width = workAreaWidth * leftCodeScale;
-    codeLeftColumnRect.rect.height = screen.height;
-    Rect codeRightColumnRect = {codeLeftColumnRect.rect.x + codeLeftColumnRect.rect.width, 0, workAreaWidth * rightCodeScale, view.y};
-    Rect runColumnRect = {codeRightColumnRect.x + codeRightColumnRect.width, 0, workAreaWidth * runSplitScale, view.y};
+    codeView.rect.x = leftPanelWidth;
+    codeView.rect.width = workAreaWidth;
+    codeView.rect.height = screen.height;
 
-    Rect *rectFocused = NULL;
-    if (uiPartFocused == Tasks)
-        rectFocused = &leftTop.rect;
-    if (uiPartFocused == Explorer)
-        rectFocused = &leftMiddle;
-    if (uiPartFocused == LeftCode)
-        rectFocused = &codeLeftColumnRect.rect;
-    if (uiPartFocused == Execution)
-        rectFocused = &runColumnRect;
+    // if (focusedView)
+    //     OutlineRect(focusedView->rect, colors.activeLine);
 
-    if (uiPartFocused == Tasks)
-    {
-        focusedView = &leftTop;
-        focusedText = &textBuffer;
-    }
-    else if (uiPartFocused == LeftCode)
-    {
-        focusedView = &codeLeftColumnRect;
-        focusedText = &leftBuffer;
-    }
-    else
-    {
-        focusedView = NULL;
-        focusedText = NULL;
-    }
-
-    if (rectFocused)
-        OutlineRect(*rectFocused, colors.activeLine);
+    if (lastSelectedView != focusedView)
+        OutlineRect(lastSelectedView->rect, colors.lastSelectedOutline);
 
     DrawRightBoundary(leftColumn);
-    DrawBottomBoundary(leftMiddle);
-    DrawBottomBoundary(leftTop.rect);
 
-    DrawRightBoundary(codeLeftColumnRect.rect);
+    DrawBottomBoundary(sidebarTop.rect);
+    DrawBottomBoundary(sidebarMiddle.rect);
+    DrawBottomBoundary(sidebarBottom.rect);
 
-    RenderFileExplorer(&leftMiddle);
+    RenderFileExplorer(&sidebarTop);
 
-    RenderTextInsideRect(&leftTop, &textBuffer);
-    UpdateSpring(&leftTop.scrollOffset, 1.0f / 60.0f);
+    ScreenView *allViews[] = {&sidebarMiddle, &sidebarBottom, &codeView};
 
-    RenderTextInsideRect(&codeLeftColumnRect, &leftBuffer);
-    UpdateSpring(&codeLeftColumnRect.scrollOffset, 1.0f / 60.0f);
+    for (i32 i = 0; i < ArrayLength(allViews); i++)
+    {
+        ScreenView *view = allViews[i];
+
+        if (view->textBuffer.buffer.content)
+        {
+            RenderTextInsideRect(view);
+
+            if (!view->isSaved)
+                RenderModifiedLabel(view);
+
+            UpdateSpring(&view->scrollOffset, 1.0f / 60.0f);
+        }
+    }
+
+    // RenderTextInsideRect(&leftTop, &textBuffer);
+    // UpdateSpring(&leftTop.scrollOffset, 1.0f / 60.0f);
+
+    // RenderTextInsideRect(&codeRect, &leftBuffer);
+    // UpdateSpring(&codeRect.scrollOffset, 1.0f / 60.0f);
 
     if (mode == ModeLocalSearch)
         DrawLocalSearch(focusedView);
 
-    if (isBuildOk && render)
-    {
-        u32 padding = 5;
-        u32 statusHeight = (font.charHeight + padding * 2);
-        Rect exectuionStatusLine = {runColumnRect.x, runColumnRect.y + runColumnRect.height - statusHeight, runColumnRect.width, statusHeight};
-        runColumnRect.height -= statusHeight;
+    // if (isBuildOk && render)
+    // {
+    //     u32 padding = 5;
+    //     u32 statusHeight = (font.charHeight + padding * 2);
+    //     Rect exectuionStatusLine = {runColumnRect.x, runColumnRect.y + runColumnRect.height - statusHeight, runColumnRect.width, statusHeight};
+    //     runColumnRect.height -= statusHeight;
 
-        i64 start = GetPerfCounter();
-        render(&canvas, &runColumnRect);
-        i32 renderUs = (f32)(GetPerfCounter() - start) * 1000.0f * 1000.0f / (f32)GetPerfFrequency();
+    //     i64 start = GetPerfCounter();
+    //     render(&canvas, &runColumnRect);
+    //     i32 renderUs = (f32)(GetPerfCounter() - start) * 1000.0f * 1000.0f / (f32)GetPerfFrequency();
 
-        renderResultsUs[currentRenderTime++] = renderUs;
-        if (currentRenderTime >= ArrayLength(renderResultsUs))
-            currentRenderTime = 0;
+    //     renderResultsUs[currentRenderTime++] = renderUs;
+    //     if (currentRenderTime >= ArrayLength(renderResultsUs))
+    //         currentRenderTime = 0;
 
-        f32 totalRenderTime = 0;
-        i32 renderCount = 0;
-        for (i32 i = 0; i < ArrayLength(renderResultsUs); i++)
-        {
-            totalRenderTime += renderResultsUs[i];
-            if (renderResultsUs[i] != 0)
-                renderCount++;
-        }
+    //     f32 totalRenderTime = 0;
+    //     i32 renderCount = 0;
+    //     for (i32 i = 0; i < ArrayLength(renderResultsUs); i++)
+    //     {
+    //         totalRenderTime += renderResultsUs[i];
+    //         if (renderResultsUs[i] != 0)
+    //             renderCount++;
+    //     }
 
-        f32 averageRenderTime = renderCount == 0 ? 0 : totalRenderTime / (f32)renderCount;
+    //     f32 averageRenderTime = renderCount == 0 ? 0 : totalRenderTime / (f32)renderCount;
 
-        u8 label[255] = {0};
-        i32 pos = 0;
-        pos += AppendStr("Compile: ", label + pos);
-        pos += AppendI32((i32)compilationMs, label + pos);
-        pos += AppendStr("ms", label + pos);
-        if (isProdBuild)
-            pos += AppendStr("  Prod: ", label + pos);
-        else
-            pos += AppendStr("  Debug: ", label + pos);
+    //     u8 label[255] = {0};
+    //     i32 pos = 0;
+    //     pos += AppendStr("Compile: ", label + pos);
+    //     pos += AppendI32((i32)compilationMs, label + pos);
+    //     pos += AppendStr("ms", label + pos);
+    //     if (isProdBuild)
+    //         pos += AppendStr("  Prod: ", label + pos);
+    //     else
+    //         pos += AppendStr("  Debug: ", label + pos);
 
-        pos += AppendI32((i32)averageRenderTime, label + pos);
-        pos += AppendStr("us", label + pos);
-        DrawTextLine(&exectuionStatusLine, label, exectuionStatusLine.x + padding, exectuionStatusLine.y + padding, 0xffffff);
-    }
-    else if (!isBuildOk)
-    {
-        RenderBuildResult(&runColumnRect);
-    }
+    //     pos += AppendI32((i32)averageRenderTime, label + pos);
+    //     pos += AppendStr("us", label + pos);
+    //     DrawTextLine(&exectuionStatusLine, label, exectuionStatusLine.x + padding, exectuionStatusLine.y + padding, 0xffffff);
+    // }
+    // else if (!isBuildOk)
+    // {
+    //     RenderBuildResult(&runColumnRect);
+    // }
 
     StretchDIBits(dc, 0, 0, view.x, view.y, 0, 0, view.x, view.y, canvas.pixels, &bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
 }
 
 void ScrollIntoView()
 {
-    if (focusedView && focusedText && focusedView->rect.height < focusedView->pageHeight)
+    if (focusedView && focusedView->rect.height < focusedView->pageHeight)
     {
         i32 itemsToLookAhead = 3;
 
         i32 lineHeightPx = RoundI32((f32)font.charHeight * lineHeight);
 
         i32 cursorY =
-            focusedText->line * lineHeightPx + padding;
+            focusedView->textBuffer.line * lineHeightPx + padding;
 
         i32 spaceToLookAhead = lineHeightPx * itemsToLookAhead;
 
@@ -663,19 +812,19 @@ inline void EnterInsertMode()
     isJustMovedToInsert = 1;
 }
 
-void SetFocusedPart(UiPart part)
+void FocusOnUiPart(i32 orderedIndex)
 {
-    uiPartFocused = part;
-    if (uiPartFocused == LeftCode)
-    {
-        currentBuffer = &leftBuffer;
-        currentBufferPath = leftBufferName;
-    }
-    else if (uiPartFocused == Tasks)
-    {
-        currentBuffer = &textBuffer;
-        currentBufferPath = textBufferName;
-    }
+    if (orderedIndex == 0)
+        focusedView = &sidebarTop;
+    else if (orderedIndex == 1)
+        focusedView = &sidebarMiddle;
+    else if (orderedIndex == 2)
+        focusedView = &sidebarBottom;
+    else if (orderedIndex == 3)
+        focusedView = &codeView;
+
+    if (focusedView != &sidebarTop)
+        lastSelectedView = focusedView;
 }
 
 void Copy(HWND window, Text *text)
@@ -718,6 +867,20 @@ void PasteFromClipboard(HWND window, Text *text)
     // ScrollIntoView();
 }
 
+void LoadFileIntoView(ScreenView *view, char *filename)
+{
+    if (view->changesAreana.size == 0)
+        view->changesAreana = CreateArena(KB(1));
+
+    view->currentChange = 0;
+    view->totalChanges = 0;
+
+    view->path = filename;
+    view->textBuffer.buffer = ReadFileIntoDoubledSizedBuffer(view->path);
+    view->isSaved = 1;
+    SetCursorPosition(&view->textBuffer, 0);
+}
+
 LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -741,15 +904,16 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_SYSKEYDOWN:
     case WM_KEYDOWN:
 
-        if (uiPartFocused == Execution)
-        {
-            if (IsKeyPressed(VK_CONTROL) && (wParam >= '1' && wParam < ('1' + UiPartsCount)))
-                SetFocusedPart(wParam - '1');
-            else if (onEventCb)
-                onEventCb(window, message, wParam, lParam);
-        }
-        else if (IsKeyPressed(VK_CONTROL) && (wParam >= '1' && wParam < ('1' + UiPartsCount)))
-            SetFocusedPart(wParam - '1');
+        // if (uiPartFocused == Execution)
+        // {
+        //     if (IsKeyPressed(VK_CONTROL) && (wParam >= '1' && wParam < ('1' + UiPartsCount)))
+        //         SetFocusedPart(wParam - '1');
+        //     else if (onEventCb)
+        //         onEventCb(window, message, wParam, lParam);
+        // }
+        // else
+        if (IsKeyPressed(VK_CONTROL) && (wParam >= '1' && wParam < ('1' + VIEWS_COUNT)))
+            FocusOnUiPart(wParam - '1');
         else if (wParam == VK_F11)
         {
             isFullscreen = !isFullscreen;
@@ -760,11 +924,24 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             PostQuitMessage(0);
             isRunning = 0;
         }
-        else if (currentBuffer)
+        else if (focusedView == &sidebarTop)
         {
+            if (wParam == 'J')
+                selectedFile = MinI32(selectedFile + 1, ArrayLength(files) - 1);
+            else if (wParam == 'K')
+                selectedFile = MaxI32(selectedFile - 1, 0);
+            else if (wParam == VK_SPACE || wParam == VK_RETURN)
+            {
+                LoadFileIntoView(lastSelectedView, files[selectedFile].name);
+            }
+        }
+        else if (focusedView)
+        {
+            Text *currentBuffer = &focusedView->textBuffer;
+
             if (mode == ModeLocalSearch)
             {
-                if (wParam == VK_BACK && searchLen > 0)
+                if ((wParam == VK_BACK || (wParam == 'Z' && IsKeyPressed(VK_CONTROL))) && searchLen > 0)
                     searchTerm[--searchLen] = '\0';
 
                 else if (IsKeyPressed(VK_MENU) && wParam == 'J')
@@ -785,6 +962,8 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                         ScrollIntoView();
                     }
                 }
+                else if (wParam == 'F' && IsKeyPressed(VK_CONTROL))
+                    mode = ModeNormal;
             }
             else if (mode == ModeNormal)
             {
@@ -830,7 +1009,11 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 if (wParam == 'J')
                 {
                     if (IsKeyPressed(VK_MENU))
+                    {
+                        BeginChange();
                         SwapLineDown(currentBuffer, &tempArena);
+                        EndChange();
+                    }
                     else
                         GoDown(currentBuffer);
                     ScrollIntoView();
@@ -838,13 +1021,28 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 if (wParam == 'K')
                 {
                     if (IsKeyPressed(VK_MENU))
+                    {
+                        BeginChange();
                         SwapLineUp(currentBuffer, &tempArena);
+                        EndChange();
+                    }
                     else
                         GoUp(currentBuffer);
                     ScrollIntoView();
                 }
                 if (wParam == 'I')
+                {
+                    BeginChange();
                     EnterInsertMode();
+                }
+
+                if (wParam == 'U' && IsKeyPressed(VK_SHIFT))
+                {
+                    RedoChange();
+                    focusedView->textBuffer.selectionStart = -1;
+                }
+                else if (wParam == 'U')
+                    UndoChange();
 
                 if (wParam == 'O')
                 {
@@ -871,13 +1069,18 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                     ScrollIntoView();
                 }
 
+                if (wParam == 'F' && IsKeyPressed(VK_CONTROL))
+                    mode = ModeLocalSearch;
                 if (wParam == 'Y')
                     Copy(window, currentBuffer);
                 if (wParam == 'P')
                     PasteFromClipboard(window, currentBuffer);
 
-                if (wParam == 'S')
-                    WriteMyFile(currentBufferPath, currentBuffer->buffer.content, currentBuffer->buffer.size);
+                if (wParam == 'S' && focusedView->path)
+                {
+                    WriteMyFile(focusedView->path, currentBuffer->buffer.content, currentBuffer->buffer.size);
+                    focusedView->isSaved = 1;
+                }
 
                 if (wParam == 'Z')
                     RemoveCharFromLeft(currentBuffer);
@@ -894,7 +1097,12 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
                 if (wParam == VK_SPACE)
                     InsertCharAtCurrentPosition(currentBuffer, ' ');
                 if (wParam == VK_TAB && IsKeyPressed(VK_SHIFT))
+                {
+                    BeginChange();
                     MoveLineLeft(currentBuffer);
+                    EndChange();
+                    currentBuffer->selectionStart = -1;
+                }
                 else if (wParam == VK_TAB)
                     MoveLineRight(currentBuffer);
 
@@ -913,12 +1121,22 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             else
             {
                 if (wParam == VK_ESCAPE || (wParam == 'I' && IsKeyPressed(VK_CONTROL)))
+                {
                     mode = ModeNormal;
+                    EndChange();
+                }
 
                 else if (wParam == VK_BACK)
                     RemoveCharFromLeft(currentBuffer);
                 else if (wParam == VK_DELETE)
                     RemoveCharFromRight(currentBuffer);
+                else if (wParam == VK_TAB && IsKeyPressed(VK_SHIFT))
+                {
+                    MoveLineLeft(currentBuffer);
+                    currentBuffer->selectionStart = -1;
+                }
+                else if (wParam == VK_TAB)
+                    MoveLineRight(currentBuffer);
             }
         }
 
@@ -934,19 +1152,22 @@ LRESULT OnEvent(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             if (wParam >= ' ' && wParam < MAX_CHAR_CODE)
                 searchTerm[searchLen++] = wParam;
 
-            FindEntries(currentBuffer);
-            SetCursorPosition(currentBuffer, entriesAt[currentEntry].at);
+            FindEntries(&focusedView->textBuffer);
+            SetCursorPosition(&focusedView->textBuffer, entriesAt[currentEntry].at);
             ScrollIntoView();
             // CenterOnRowIfNotVisible();
         }
-        else if (mode == ModeInsert && currentBuffer)
+        else if (mode == ModeInsert && focusedView)
         {
             if (isJustMovedToInsert)
                 isJustMovedToInsert = 0;
             else if (wParam == '\r' || wParam == '\n')
-                InsertCharAtCurrentPosition(currentBuffer, '\n');
+                InsertCharAtCurrentPosition(&focusedView->textBuffer, '\n');
             else if (wParam >= ' ')
-                InsertCharAtCurrentPosition(currentBuffer, wParam);
+                InsertCharAtCurrentPosition(&focusedView->textBuffer, wParam);
+            focusedView->isSaved = 0;
+
+            focusedView->textBuffer.selectionStart = -1;
         }
         break;
 
@@ -972,16 +1193,18 @@ void WinMainCRTStartup()
     InitFonts();
     InitAnimations();
 
+    // TODO: remove this temp
+
     tempArena = CreateArena(KB(512));
-    leftBuffer.buffer = ReadFileIntoDoubledSizedBuffer(leftBufferName);
-    textBuffer.buffer = ReadFileIntoDoubledSizedBuffer(textBufferName);
 
     HWND window = OpenWindow(OnEvent, colors.bg, "Editor");
 
-    SetFocusedPart(LeftCode);
+    LoadFileIntoView(&codeView, files[1].name);
+    LoadFileIntoView(&sidebarMiddle, files[2].name);
+    LoadFileIntoView(&sidebarBottom, files[3].name);
 
-    leftBuffer.selectionStart = -1;
-    textBuffer.selectionStart = -1;
+    FocusOnUiPart(3);
+    InitChanges();
 
     while (isRunning)
     {

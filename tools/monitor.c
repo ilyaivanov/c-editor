@@ -32,6 +32,7 @@ FileInfo files[] = {
     {0, ".\\main2.c"},
     {0, ".\\game.c"},
     {0, ".\\main_editor.c"},
+    {0, ".\\main_console.c"},
 };
 
 int main()
